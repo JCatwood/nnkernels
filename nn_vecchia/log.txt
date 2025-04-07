@@ -1,4 +1,6 @@
 architecture, n_epoch, n_batch, lr, mse
-LSTM + Linear, 3000, 1000, 0.001, 0.009
+LSTM(128) + Linear, 10000, 1000, 0.001, 0.009
 Linear + LSTM + Linear, 10000, 1000, 0.001, 0.009
 DNN encoder + sum + DNN decoder, 10000, 1000, 0.001, 0.022
+LSTM(256) + Linear, 10000, 1000, 0.001, 0.007
+LSTM(256) + Linear, 20000, 1000, 0.001, 0.005
