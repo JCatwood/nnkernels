@@ -58,3 +58,18 @@ def loss_len1to30_cond_sd(model, loss_function, kernel, nbatch):
     cond_sd_pred, _, _ = model(locs, None, None)
     loss = loss_function(cond_sd_pred, cond_sd)
     return loss
+
+def loss_len10_cond_mean(model, loss_function, kernel, nbatch):
+    with torch.no_grad():
+        locs_and_y, cond_mean = prepare_sequence_cond_mean(10, kernel, nbatch)
+    cond_mean_pred, _, _ = model(locs_and_y, None, None)
+    loss = loss_function(cond_mean_pred, cond_mean)
+    return loss
+
+def loss_len1to30_cond_mean(model, loss_function, kernel, nbatch):
+    length = torch.randint(1, 30, (nbatch,))
+    with torch.no_grad():
+        locs_and_y, cond_mean = prepare_sequence_cond_mean(length, kernel, nbatch)
+    cond_mean_pred, _, _ = model(locs_and_y, None, None)
+    loss = loss_function(cond_mean_pred, cond_mean)
+    return loss
