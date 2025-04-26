@@ -1,6 +1,7 @@
 import torch
 import sys
 import time
+import glob
 from torch.utils.data import Dataset, DataLoader
 from sklearn.neighbors import NearestNeighbors
 
@@ -55,6 +56,14 @@ n_batch_fake = 0
 # model initialization
 mdl_mean = LSTMKernelMean(d + 1, n_hidden)
 mdl_sd = LSTMKernelSD(d, n_hidden)
+mdl_mean_pretrain_fn = glob.glob(
+    f"trained_models/cond_mean_len1-30_LSTM_{n_hidden}_*.pt")
+mdl_sd_pretrain_fn = glob.glob(
+    f"trained_models/cond_sd_len1-30_LSTM_{n_hidden}_*.pt")
+if len(mdl_mean_pretrain_fn) > 0:
+    mdl_mean.load_state_dict(torch.load(mdl_mean_pretrain_fn[0]))
+if len(mdl_sd_pretrain_fn) > 0:
+    mdl_sd.load_state_dict(torch.load(mdl_sd_pretrain_fn[0]))
 
 # model training
 optimizer = torch.optim.Adam(list(mdl_mean.parameters()) + list(mdl_sd.parameters()), lr=0.001)
