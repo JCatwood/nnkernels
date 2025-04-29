@@ -31,4 +31,3 @@ class LSTMKernelMean(torch.nn.Module):
             lstm_out, (h_out, c_out) = self.lstm(locsNy, (h0, c0))
         out = self.hidden2pred(lstm_out[:, -1, :]).reshape((-1,))
         return out, h_out, c_out
-

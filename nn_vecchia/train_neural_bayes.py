@@ -17,12 +17,13 @@ if len(sys.argv) > 1:
     n_hidden = int(sys.argv[1])
     n_epoch = int(sys.argv[2])
     n_batch = int(sys.argv[3])
+    task_type = sys.argv[4]
 else:
     n_hidden = 256
     n_epoch = 4000
     n_batch = 100
+    task_type = "cond_mean" 
 fixed_len = False
-task_type = "cond_mean" 
 if task_type == "cond_sd":
     model = LSTMKernelSD(2, n_hidden)
     seq_func = prepare_sequence_cond_sd
@@ -55,28 +56,37 @@ if len(pre_train_fn) > 0:
     pre_train_fn = pre_train_fn[0]
     pre_train_sz = int(re.search(r'LSTM_\d+_\d+', pre_train_fn).group().split('_')[2])
     model.load_state_dict(torch.load(pre_train_fn))
+    print(f"Loaded pre-trained model {pre_train_fn}", flush=True)
     output_fn = output_fn.replace(f"{n_epoch * n_batch}.pt", 
                                   f"{n_epoch * n_batch + pre_train_sz}.pt")
 
 # scheduler
 def lr_lambda(epoch):
-    # LR to be 0.1 * (1/1+0.01*epoch)
-    base_lr = 0.1
-    factor = 0.001
-    return base_lr/(1+factor*epoch)
+    # base_lr = 0.1
+    # factor = 0.001
+    # return base_lr/(1+factor*epoch)
+    return 0.001
 
 loss_function = torch.nn.MSELoss()
-optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
+optimizer = torch.optim.Adam(model.parameters(), lr=1)
 scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda)
 kernel = gpytorch.kernels.MaternKernel(1.5)
 kernel.lengthscale = 0.1
+
+if torch.cuda.is_available():
+    device = torch.device('cuda')
+    print(f"GPU is available. Using device: {torch.cuda.get_device_name(0)}")
+else:
+    print("GPU is not available. Using CPU.")
+    device = torch.device('cpu')
+model.to(device)
 
 os.makedirs("trained_models", exist_ok=True)
 model.train()
 timer = time.perf_counter()
 for epoch in range(n_epoch): 
     optimizer.zero_grad()
-    loss = loss_func(model, loss_function, kernel, n_batch)
+    loss = loss_func(model, loss_function, kernel, n_batch, device)
     loss.backward()
     optimizer.step()
     scheduler.step()

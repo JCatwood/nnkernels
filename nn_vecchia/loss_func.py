@@ -44,32 +44,40 @@ def prepare_sequence_cond_mean(length, kernel, nbatch = 1):
         locs_and_y = torch.cat((locs, y), -1)
         return locs_and_y, cond_mean
 
-def loss_len10_cond_sd(model, loss_function, kernel, nbatch):
+def loss_len10_cond_sd(model, loss_function, kernel, nbatch, 
+                       device=torch.device('cpu')):
     with torch.no_grad():
         locs, cond_sd = prepare_sequence_cond_sd(10, kernel, nbatch)
+        locs, cond_sd = locs.to(device), cond_sd.to(device)
     cond_sd_pred, _, _ = model(locs, None, None)
     loss = loss_function(cond_sd_pred, cond_sd)
     return loss
 
-def loss_len1to30_cond_sd(model, loss_function, kernel, nbatch):
+def loss_len1to30_cond_sd(model, loss_function, kernel, nbatch, 
+                       device=torch.device('cpu')):
     length = torch.randint(1, 30, (nbatch,))
     with torch.no_grad():
         locs, cond_sd = prepare_sequence_cond_sd(length, kernel, nbatch)
+        locs, cond_sd = locs.to(device), cond_sd.to(device)
     cond_sd_pred, _, _ = model(locs, None, None)
     loss = loss_function(cond_sd_pred, cond_sd)
     return loss
 
-def loss_len10_cond_mean(model, loss_function, kernel, nbatch):
+def loss_len10_cond_mean(model, loss_function, kernel, nbatch, 
+                       device=torch.device('cpu')):
     with torch.no_grad():
         locs_and_y, cond_mean = prepare_sequence_cond_mean(10, kernel, nbatch)
+        locs_and_y, cond_mean = locs_and_y.to(device), cond_mean.to(device)
     cond_mean_pred, _, _ = model(locs_and_y, None, None)
     loss = loss_function(cond_mean_pred, cond_mean)
     return loss
 
-def loss_len1to30_cond_mean(model, loss_function, kernel, nbatch):
+def loss_len1to30_cond_mean(model, loss_function, kernel, nbatch, 
+                       device=torch.device('cpu')):
     length = torch.randint(1, 30, (nbatch,))
     with torch.no_grad():
         locs_and_y, cond_mean = prepare_sequence_cond_mean(length, kernel, nbatch)
+        locs_and_y, cond_mean = locs_and_y.to(device), cond_mean.to(device)
     cond_mean_pred, _, _ = model(locs_and_y, None, None)
     loss = loss_function(cond_mean_pred, cond_mean)
     return loss
