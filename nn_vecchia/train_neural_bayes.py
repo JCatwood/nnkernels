@@ -53,7 +53,10 @@ else: # "cond_mean"
 
 # load pre-trained model if any
 if len(pre_train_fn) > 0:
-    pre_train_fn = pre_train_fn[0]
+    pre_train_sz = [int(re.search(r'LSTM_\d+_\d+', fn).group().split('_')[2]) 
+                    for fn in pre_train_fn]
+    ind_max_sz = max(enumerate(pre_train_sz), key=lambda x: x[1])[0]
+    pre_train_fn = pre_train_fn[ind_max_sz]
     pre_train_sz = int(re.search(r'LSTM_\d+_\d+', pre_train_fn).group().split('_')[2])
     model.load_state_dict(torch.load(pre_train_fn))
     print(f"Loaded pre-trained model {pre_train_fn}", flush=True)
@@ -104,12 +107,14 @@ with torch.no_grad():
     if fixed_len:
         n_locs = 10
         X, y = seq_func(n_locs, kernel, n_batch)
+        X, y = X.to(device), y.to(device)
         y_pred, _, _ = model(X, None, None)
         loss = loss_function(y_pred, y)
         print(f"At length {n_locs}, total variation is {y.var().item()}, MSE is {loss.item()}")
     else:
         n_locs = torch.randint(1, 30, (n_batch,))
         X, y = seq_func(n_locs, kernel, n_batch)
+        X, y = X.to(device), y.to(device)
         y_pred, _, _ = model(X, None, None)
         loss = loss_function(y_pred, y)
         print(f"With n_loc in [{min(n_locs)}, {max(n_locs)}], "
