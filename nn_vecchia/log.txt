@@ -1,7 +1,0 @@
-problem, architecture, n_epoch, n_batch, lr, mse
-cond_var_at_10, LSTM(128) + Linear, 10000, 1000, 0.001, 0.009
-cond_var_at_10, Linear + LSTM + Linear, 10000, 1000, 0.001, 0.009
-cond_var_at_10, DNN encoder + sum + DNN decoder, 10000, 1000, 0.001, 0.022
-cond_var_at_10, LSTM(256) + Linear, 10000, 1000, 0.001, 0.007
-cond_var_at_10, LSTM(256) + Linear, 20000, 1000, 0.001, 0.005
-cond_var_at_10, LSTM(512) + Linear, 80000, 1000, 0.001, 0.0017
