@@ -24,15 +24,16 @@ class NNDT_Sum_NNTG(torch.nn.Module):
     
     def forward(self, X, length=None):
         X_after_DT = self.DT(X)
-        if len(length) > 1:
+        if isinstance(length, int) or length is None:
+            X_after_sum = torch.sum(X_after_DT, dim = -2)
+        else:
             assert len(length) == X.size(0)
             mask_float = torch.zeros_like(X_after_DT)
             n = X.size(1)
             mask_bool = torch.arange(n).reshape(1, n) < length.reshape(-1, 1) # n_batch X n
             mask_float[mask_bool, :] = 1.0
             X_after_sum = torch.sum(X_after_DT * mask_float, dim = -2)
-        else:
-            X_after_sum = torch.sum(X_after_DT, dim = -2)
+            
         target = self.TG(X_after_sum).squeeze()
         return target
     

@@ -35,7 +35,8 @@ def prepare_sequence_cond_mean(length, kernel, nbatch=1, d=2):
         L = torch.linalg.cholesky(covmat)
         x = torch.normal(0.0, 1.0, (nbatch, length_max, 1))
         y = L @ x
-        cond_mean = y[:, :, 0] - L.diagonal() * x[:, :, 0]
+        cond_mean = y[:, :, 0] - \
+            L[:, torch.arange(length_max), torch.arange(length_max)] * x[:, :, 0]
         cond_mean = cond_mean[torch.arange(nbatch), length - 1]
         mask = torch.arange(length_max).reshape(1, -1) < length.reshape(-1, 1)
         locs[~mask, :] = 0
