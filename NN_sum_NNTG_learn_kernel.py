@@ -9,7 +9,7 @@ from models import NNDT_Sum_NNTG, LSTM_NNTG, Kernel_Nugg
 torch.manual_seed(1)
 
 d = 2 # locs are sampled from R^d
-target = 'cond_mean'
+target = 'cond_sd'
 fixed_len = False
 if len(sys.argv) > 1:
     n_layer_DT = int(sys.argv[1])
@@ -82,7 +82,10 @@ for epoch in range(n_epoch):
         X, y = X.to(device), y.to(device)
     # predict the target
     optimizer.zero_grad()
-    y_pred = model(X, length)
+    if target == 'cond_sd':
+        y_pred = torch.exp(model(X, length))
+    else:
+        y_pred = model(X, length)
     loss = loss_function(y_pred, y)
     loss.backward()
     optimizer.step()
