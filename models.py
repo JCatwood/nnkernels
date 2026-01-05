@@ -71,3 +71,29 @@ class Kernel_Nugg(torch.nn.Module):
         n = covmat.shape[-1]
         covmat_nug = covmat + torch.eye(n) * torch.exp(self.raw_nugget)
         return covmat_nug
+
+class GPVecchia(torch.nn.Module):
+    """
+    The Vecchia approximation of a zero-mean GP
+    """
+    def __init__(self, kernel):
+        super().__init__()
+        self.kernel = kernel
+
+    def forward(self, locs_batch, y_batch, length=None):
+        N = locs_batch.size(0)
+        n_max = locs_batch.size(1)
+        covmat = self.kernel(locs_batch)
+        L = torch.linalg.cholesky(covmat).to_dense()
+        x = torch.linalg.solve_triangular(L, y_batch.unsqueeze(-1), upper=False)
+        L_zero_diag = L - L * torch.eye(n_max).unsqueeze(0)
+        cond_mean_tmp = L_zero_diag @ x
+        
+        if isinstance(length, int) or length is None:
+            cond_sd = L[:, -1, -1]
+            cond_mean = cond_mean_tmp[:, -1, 0]
+        else:
+            cond_sd = L[torch.arange(N), length - 1, length - 1]
+            cond_mean = cond_mean_tmp[:, length - 1, 0]
+        
+        return cond_mean, cond_sd

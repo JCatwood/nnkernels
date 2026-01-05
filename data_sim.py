@@ -44,3 +44,16 @@ def prepare_sequence_cond_mean(length, kernel, nbatch=1, d=2):
         y[torch.arange(nbatch), length - 1, :] = 0
         locs_and_y = torch.cat((locs, y), -1)
         return locs_and_y, cond_mean
+
+def sim_GP(nTrain, nTest, kernel, d=2):
+    n = nTrain + nTest
+    locs = torch.rand([n, d])
+    covmat = kernel(locs)
+    L = torch.linalg.cholesky(covmat)
+    x = torch.normal(0.0, 1.0, (n, 1))
+    y = (L @ x).squeeze()
+    locs_train = locs[:nTrain, :]
+    locs_test = locs[nTrain:, :]
+    y_train = y[:nTrain]
+    y_test = y[nTrain:]
+    return locs_train, locs_test, y_train, y_test

@@ -28,9 +28,11 @@ else:
     # the latent dim is 3
     if target == 'cond_sd':
         size_ST = [d, 64, 64, 3] 
+        size_TG = [3, 32, 32, 1]
     else:
-        size_ST = [d + 1, 64, 64, 3] 
-    size_TG = [3, 32, 32, 1]
+    # the latent dim is 4
+        size_ST = [d + 1, 96, 96, 4] 
+        size_TG = [4, 96, 96, 1]
 n_epoch = 4000
 n_batch = 1000
 
