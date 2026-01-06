@@ -6,13 +6,15 @@ class NNDT_Sum_NNTG(torch.nn.Module):
     Given a tensor of dim [*, n, d], representing batches of n locs embeded in R^d, the
     forward propogation first transforms each d-dimensional coordinate vector (last dimension), then aggregate (sum) across the n locs (2nd last dimension), finally pass the previous result though another NN to predict the target
     """
-    def __init__(self, NNDT_size_seq, NNTG_size_seq):
+    def __init__(self, NNDT_size_seq, NNTG_size_seq, dropout=0.0):
         super().__init__()
         layers = []
         for i in range(len(NNDT_size_seq) - 1):
             layers.append(nn.Linear(NNDT_size_seq[i], NNDT_size_seq[i + 1]))
             if i < len(NNDT_size_seq) -  2:
                 layers.append(nn.ReLU())
+        if dropout > 0.0:
+            layers.append(torch.nn.Dropout(p=dropout))
         self.DT = nn.Sequential(*layers)
 
         layers = []
