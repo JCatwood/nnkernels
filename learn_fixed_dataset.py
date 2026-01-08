@@ -4,7 +4,7 @@ import time
 import numpy as np
 from sklearn.neighbors import NearestNeighbors
 
-from models import NNDT_Sum_NNTG, Kernel_Nugg, GPVecchia
+from models import NNDT_Sum_NNTG, GPVecchia, MyMaternKernel
 from data_sim import sim_GP
 from prepare_seq import prepare_seq
 from loss import NllLoss
@@ -29,9 +29,7 @@ else:
     print("GPU is not available. Using CPU.")
     device = torch.device('cpu')
 
-kernel_gpt = gpytorch.kernels.MaternKernel(1.5)
-kernel_gpt.lengthscale = 0.3
-kernel = Kernel_Nugg(kernel_gpt, 0.01)
+kernel = MyMaternKernel(1.0, 0.3, 1.5, 0.01)
 locs_train, locs_test, y_train, y_test = sim_GP(n_train, n_test, kernel, d)
 if use_noise:
     locs_sd, y_sd = torch.std(locs_train, dim=0, keepdim=True), \
@@ -125,13 +123,12 @@ with torch.no_grad():
 
 # compare with GPVecchia initiated with the true kernel
 with torch.no_grad():
-    mdl_GP = GPVecchia(kernel)
+    mdl_GP = GPVecchia(MyMaternKernel, *[1.0, 0.3, 1.5, 0.01])
     y_pred_test_GP, y_stderr_test_GP = mdl_GP(locs_batch_test, y_batch_test)
     loss_test_GP = loss_function(y_pred_test_GP, y_test, y_stderr_test_GP)
     print(f"Loss of GP using the testing dataset is {loss_test_GP.detach().item()}", flush=True)
 
-    another_kernel = Kernel_Nugg(gpytorch.kernels.MaternKernel(0.5), 0.01)
-    mdl_GP = GPVecchia(another_kernel)
+    mdl_GP = GPVecchia(MyMaternKernel, *[1.0, 0.1, 0.5, 0.005])
     y_pred_test_GP, y_stderr_test_GP = mdl_GP(locs_batch_test, y_batch_test)
     loss_test_GP = loss_function(y_pred_test_GP, y_test, y_stderr_test_GP)
     print(f"Loss of mis-specified GP using the testing dataset is {loss_test_GP.detach().item()}", flush=True)

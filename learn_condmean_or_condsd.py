@@ -4,7 +4,7 @@ import sys
 import time
 
 from data_sim import prepare_sequence_cond_sd, prepare_sequence_cond_mean
-from models import NNDT_Sum_NNTG, LSTM_NNTG, Kernel_Nugg
+from models import NNDT_Sum_NNTG, MyMaternKernel
 
 torch.manual_seed(1)
 
@@ -54,7 +54,7 @@ optimizer = torch.optim.Adam(model.parameters(), lr=1)
 scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda)
 kernel_gpt = gpytorch.kernels.MaternKernel(1.5)
 kernel_gpt.lengthscale = 0.3
-kernel = Kernel_Nugg(kernel_gpt, 0.01)
+kernel = MyMaternKernel(1.0, 0.3, 1.5, 0.01)
 
 if torch.cuda.is_available():
     device = torch.device('cuda')

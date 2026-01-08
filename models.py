@@ -1,5 +1,6 @@
 import torch
 from torch import nn
+import gpytorch
 
 class NNDT_Sum_NNTG(torch.nn.Module):
     """
@@ -59,28 +60,49 @@ class LSTM_NNTG(torch.nn.Module):
         out = self.hidden2pred(lstm_out[:, -1, :]).reshape((-1,))
         return out, h_out, c_out
 
-class Kernel_Nugg(torch.nn.Module):
-    """
-    GPyTorch kernel with a nugget
-    """
-    def __init__(self, gpt_kernel, nugget):
-        super().__init__()
-        self.gpt_kernel = gpt_kernel
-        self.raw_nugget = nn.Parameter(torch.log(torch.tensor(nugget)))
+class MyMaternKernel(gpytorch.kernels.MaternKernel):
+    def __init__(self, scale, lengthscale, nu, nugget):
+        super().__init__(nu)
+        is_stationary = True
+        self.raw_scale = torch.nn.Parameter(torch.log(torch.tensor(scale)))
+        self.lengthscale = lengthscale
+        self.raw_nugget = torch.nn.Parameter(torch.log(torch.tensor(nugget)))
     
-    def forward(self, *args, **kwargs):
-        covmat = self.gpt_kernel(*args, **kwargs).evaluate()
-        n = covmat.shape[-1]
-        covmat_nug = covmat + torch.eye(n) * torch.exp(self.raw_nugget)
-        return covmat_nug
+    def forward(self, x1, x2, **params):
+        covmat_parent = super().forward(x1, x2, **params)
+        n = covmat_parent.shape[-1]
+        covmat = covmat_parent * (self.scale ** 2) + torch.eye(n) * self.nugget
+        return covmat
+
+    @property
+    def nugget(self):
+        return torch.exp(self.raw_nugget)
+    
+    @nugget.setter
+    def nugget(self, new_nugget):
+        self.raw_nugget.copy_(torch.log(torch.tensor(new_nugget)))
+    
+    @property
+    def scale(self):
+        return torch.exp(self.raw_scale)
+    
+    @scale.setter
+    def scale(self, new_scale):
+        self.raw_scale.copy_(torch.log(torch.tensor(new_scale)))
+    
+    def __call__(self, x1, x2=None, **params):
+        if x2 is None:
+            x2 = x1
+        return self.forward(x1, x2, **params)
+
 
 class GPVecchia(torch.nn.Module):
     """
     The Vecchia approximation of a zero-mean GP
     """
-    def __init__(self, kernel):
+    def __init__(self, KernelCls, *args, **kwargs):
         super().__init__()
-        self.kernel = kernel
+        self.kernel = KernelCls(*args, **kwargs)
 
     def forward(self, locs_batch, y_batch, length=None):
         N = locs_batch.size(0)
