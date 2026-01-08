@@ -71,7 +71,7 @@ class MyMaternKernel(gpytorch.kernels.MaternKernel):
     def forward(self, x1, x2, **params):
         covmat_parent = super().forward(x1, x2, **params)
         n = covmat_parent.shape[-1]
-        covmat = covmat_parent * (self.scale ** 2) + torch.eye(n) * self.nugget
+        covmat = covmat_parent * (self.scale ** 2) + torch.eye(n).to(self.device) * self.nugget
         return covmat
 
     @property
@@ -110,7 +110,7 @@ class GPVecchia(torch.nn.Module):
         covmat = self.kernel(locs_batch)
         L = torch.linalg.cholesky(covmat).to_dense()
         x = torch.linalg.solve_triangular(L, y_batch.unsqueeze(-1), upper=False)
-        L_zero_diag = L - L * torch.eye(n_max).unsqueeze(0)
+        L_zero_diag = L - L * torch.eye(n_max).unsqueeze(0).to(L.device)
         cond_mean_tmp = L_zero_diag @ x
         
         if isinstance(length, int) or length is None:
