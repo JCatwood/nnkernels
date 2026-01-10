@@ -5,34 +5,23 @@ import time
 
 from data_sim import prepare_sequence_cond_sd, prepare_sequence_cond_mean
 from models import NNDT_Sum_NNTG, MyMaternKernel
+from input_transform import input_transformed_dim, input_transform
 
 torch.manual_seed(1)
 
 d = 2 # locs are sampled from R^d
-target = 'cond_sd'
+target = 'cond_mean'
 fixed_len = False
-if len(sys.argv) > 1:
-    n_layer_DT = int(sys.argv[1])
-    n_layer_TG = int(sys.argv[2])
-    size_all = [int(sys.argv[i]) for i in range(3, len(sys.argv))]
-    assert len(size_all) == n_layer_DT + n_layer_TG
-    assert size_all[n_layer_DT - 1] == size_all[n_layer_DT]
-    if target == 'cond_sd':
-        size_ST = [d] + size_all[:n_layer_DT]
-    else: # cond_mean
-        size_ST = [d + 1] + size_all[:n_layer_DT]
-    size_TG = size_all[n_layer_DT:] + [1]
+input_trans_type = 'dist_direction_and_y'
+nfeatures = input_transformed_dim(d, input_trans_type)
+# the latent dim is 3
+if target == 'cond_sd':
+    size_ST = [nfeatures, 64, 64, 3] 
+    size_TG = [3, 32, 32, 1]
 else:
-    n_layer_DT = 3
-    n_layer_TG = 3
-    # the latent dim is 3
-    if target == 'cond_sd':
-        size_ST = [d, 64, 64, 3] 
-        size_TG = [3, 32, 32, 1]
-    else:
-    # the latent dim is 4
-        size_ST = [d + 1, 96, 96, 4] 
-        size_TG = [4, 96, 96, 1]
+# the latent dim is 4
+    size_ST = [nfeatures, 96, 96, 4] 
+    size_TG = [4, 96, 96, 1]
 n_epoch = 4000
 n_batch = 1000
 
@@ -73,19 +62,20 @@ for epoch in range(n_epoch):
     else:
         length = torch.randint(1, 30, (n_batch,))
     with torch.no_grad():
-        X, y = seq_func(length, kernel, nbatch=n_batch, d=d)
+        X_batch, y = seq_func(length, kernel, nbatch=n_batch, d=d)
         if target == 'cond_mean':
-            X[torch.arange(n_batch), length - 1, d] = 0.0
-        X_at_length = X[torch.arange(n_batch), length - 1, :] # n_batch X d or n_batch X (d + 1)
-        X_at_length_reshape = X_at_length.reshape(n_batch, 1, -1)
-        X = X - X_at_length_reshape
-        X, y = X.to(device), y.to(device)
+            locs_batch, y_batch = X_batch[:, :, :d], X_batch[:, :, d:]
+            X_batch_trans = input_transform(locs_batch, y_batch, length, input_trans_type)
+        else:
+            locs_batch = X_batch
+            X_batch_trans = input_transform(locs_batch, None, length, input_trans_type)
+        X_batch_trans, y = X_batch_trans.to(device), y.to(device)
     # predict the target
     optimizer.zero_grad()
     if target == 'cond_sd':
-        y_pred = torch.exp(model(X, length))
+        y_pred = torch.exp(model(X_batch_trans, length))
     else:
-        y_pred = model(X, length)
+        y_pred = model(X_batch_trans, length)
     loss = loss_function(y_pred, y)
     loss.backward()
     optimizer.step()
