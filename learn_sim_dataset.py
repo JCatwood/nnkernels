@@ -13,8 +13,8 @@ d = 2 # locs are sampled from R^d
 m = 30
 dropout_ratio = 0.0
 fixed_len = True
-input_trans_mean = "locs_diff_and_y"
-input_trans_sd = "locs_diff"
+input_trans_mean = "dist_direction_and_y"
+input_trans_sd = "dist_direction"
 nfeature_mean = input_transformed_dim(d, input_trans_mean)
 nfeature_sd = input_transformed_dim(d, input_trans_sd)
 
@@ -46,7 +46,7 @@ model_sd.to(device)
 # scheduler
 def lr_lambda(epoch):
     base_lr = 0.001
-    factor = 0.0001
+    factor = 0.0003
     return base_lr/(1+factor*epoch)
     # return 0.001
 
@@ -96,6 +96,7 @@ print(f"Loss after {epoch} iterations is {loss.detach().item()}", flush=True)
 
 model_mean.eval()
 model_sd.eval()
+loss_MSE = torch.nn.MSELoss()
 # compare with GPVecchia initiated with the true kernel
 with torch.no_grad():
     if fixed_len:
@@ -115,14 +116,17 @@ with torch.no_grad():
     y_pred = model_mean(input_mean, length=length)
     y_stderr = torch.exp(model_sd(input_sd, length=length))
     loss = loss_function(y_pred, y_true, y_stderr)
-    print(f"Loss of the proposed model is {loss.detach().item()}", flush=True)
+    print(f"NLL loss of the proposed model is {loss.detach().item()}", flush=True)
+    print(f"MSE loss of the proposed model is {loss_MSE(y_pred, y_true).item()}", flush=True)
     
     mdl_GP = GPVecchia(MyMaternKernel, *[1.0, 0.3, 1.5, 0.01]).to(device)
     y_pred_test_GP, y_stderr_test_GP = mdl_GP(locs_batch, y_batch, length=length)
     loss_test_GP = loss_function(y_pred_test_GP, y_true, y_stderr_test_GP)
-    print(f"Loss of GP using the testing dataset is {loss_test_GP.detach().item()}", flush=True)
+    print(f"NLL loss of GP using the testing dataset is {loss_test_GP.detach().item()}", flush=True)
+    print(f"MSE loss of GP is {loss_MSE(y_pred_test_GP, y_true).item()}", flush=True)
 
     mdl_GP = GPVecchia(MyMaternKernel, *[1.0, 0.1, 0.5, 0.005]).to(device)
     y_pred_test_GP, y_stderr_test_GP = mdl_GP(locs_batch, y_batch, length=length)
     loss_test_GP = loss_function(y_pred_test_GP, y_true, y_stderr_test_GP)
-    print(f"Loss of mis-specified GP using the testing dataset is {loss_test_GP.detach().item()}", flush=True)
+    print(f"NLL loss of mis-specified GP using the testing dataset is {loss_test_GP.detach().item()}", flush=True)
+    print(f"MSE loss of mis-specified GP is {loss_MSE(y_pred_test_GP, y_true).item()}", flush=True)
