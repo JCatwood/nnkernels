@@ -5,6 +5,7 @@ import time
 from models import NNDT_Sum_NNTG, GPVecchia, MyMaternKernel
 from loss import NllLoss
 from data_sim import prepare_sequence_locs_and_y
+from input_transform import input_transformed_dim, input_transform
 
 torch.manual_seed(1)
 
@@ -12,22 +13,26 @@ d = 2 # locs are sampled from R^d
 m = 30
 dropout_ratio = 0.0
 fixed_len = True
+input_trans_mean = "locs_diff_and_y"
+input_trans_sd = "locs_diff"
+nfeature_mean = input_transformed_dim(d, input_trans_mean)
+nfeature_sd = input_transformed_dim(d, input_trans_sd)
 
 if torch.cuda.is_available():
     device = torch.device('cuda')
     print(f"GPU is available. Using device: {torch.cuda.get_device_name(0)}")
-    size_DT_mean = [d + 1, 128, 128, 128, 8]
+    size_DT_mean = [nfeature_mean, 128, 128, 128, 8]
     size_TG_mean = [8, 128, 128, 128, 1]
-    size_DT_sd = [d, 128, 128, 128, 8]
+    size_DT_sd = [nfeature_sd, 128, 128, 128, 8]
     size_TG_sd = [8, 128, 128, 128, 1]
     n_batch = 2048
     n_epoch = 30000
 else:
     print("GPU is not available. Using CPU.")
     device = torch.device('cpu')
-    size_DT_mean = [d + 1, 96, 96, 4] 
+    size_DT_mean = [nfeature_mean, 96, 96, 4] 
     size_TG_mean = [4, 96, 96, 1]
-    size_DT_sd = [d, 64, 64, 3] 
+    size_DT_sd = [nfeature_sd, 64, 64, 3] 
     size_TG_sd = [3, 32, 32, 1]
     n_batch = 1024
     n_epoch = 4000
@@ -62,17 +67,16 @@ for epoch in range(n_epoch):
     # draw mini-batches
     with torch.no_grad():
         locs_batch, y_batch = prepare_sequence_locs_and_y(length_max, kernel, nbatch=n_batch, d=d)
-        locs_at_length = locs_batch[torch.arange(n_batch), length - 1, :].unsqueeze(1)
-        locs_batch = locs_batch - locs_at_length
         y_true = y_batch[torch.arange(n_batch), length - 1].clone()
         y_batch[torch.arange(n_batch), length - 1] = 0.0
-        locs_and_y_batch = torch.cat((locs_batch, y_batch.unsqueeze(-1)), dim=-1)
-        locs_batch, y_true, locs_and_y_batch = locs_batch.to(device), \
-            y_true.to(device), locs_and_y_batch.to(device)
+        input_mean = input_transform(locs_batch, y_batch.unsqueeze(-1), length, type=input_trans_mean)
+        input_sd = input_transform(locs_batch, None, length, type=input_trans_sd)
+        input_mean, input_sd, y_true = input_mean.to(device), \
+            input_sd.to(device), y_true.to(device)
     # predict mean and stderr
     optimizer.zero_grad()
-    y_pred = model_mean(locs_and_y_batch, length=length)
-    y_stderr = torch.exp(model_sd(locs_batch, length=length))
+    y_pred = model_mean(input_mean, length=length)
+    y_stderr = torch.exp(model_sd(input_sd, length=length))
     loss = loss_function(y_pred, y_true, y_stderr)
     loss.backward()
     optimizer.step()
@@ -101,16 +105,15 @@ with torch.no_grad():
         length = torch.randint(1, m + 1, (n_batch,))
         length_max = length.max().item()
     locs_batch, y_batch = prepare_sequence_locs_and_y(length_max, kernel, nbatch=n_batch, d=d)
-    locs_at_length = locs_batch[torch.arange(n_batch), length - 1, :].unsqueeze(1)
-    locs_batch = locs_batch - locs_at_length
     y_true = y_batch[torch.arange(n_batch), length - 1].clone()
     y_batch[torch.arange(n_batch), length - 1] = 0.0
-    locs_and_y_batch = torch.cat((locs_batch, y_batch.unsqueeze(-1)), dim=-1)
-    locs_batch, y_true, locs_and_y_batch, y_batch = locs_batch.to(device), \
-        y_true.to(device), locs_and_y_batch.to(device), y_batch.to(device)
+    input_mean = input_transform(locs_batch, y_batch.unsqueeze(-1), length, type=input_trans_mean)
+    input_sd = input_transform(locs_batch, None, length, type=input_trans_sd)
+    locs_batch, y_batch, input_mean, input_sd, y_true = locs_batch.to(device), \
+        y_batch.to(device), input_mean.to(device), input_sd.to(device), y_true.to(device)
     
-    y_pred = model_mean(locs_and_y_batch, length=length)
-    y_stderr = torch.exp(model_sd(locs_batch, length=length))
+    y_pred = model_mean(input_mean, length=length)
+    y_stderr = torch.exp(model_sd(input_sd, length=length))
     loss = loss_function(y_pred, y_true, y_stderr)
     print(f"Loss of the proposed model is {loss.detach().item()}", flush=True)
     

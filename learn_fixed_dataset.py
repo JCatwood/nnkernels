@@ -8,6 +8,7 @@ from models import NNDT_Sum_NNTG, GPVecchia, MyMaternKernel
 from data_sim import sim_GP
 from prepare_seq import prepare_seq
 from loss import NllLoss
+from input_transform import input_transformed_dim, input_transform
 
 torch.manual_seed(1)
 
@@ -19,6 +20,10 @@ n_epoch = 4000
 n_batch = 1000
 use_noise = False
 dropout_ratio = 0.5
+input_trans_mean = "locs_diff_and_y"
+input_trans_sd = "locs_diff"
+nfeature_mean = input_transformed_dim(d, input_trans_mean)
+nfeature_sd = input_transformed_dim(d, input_trans_sd)
 if use_noise:
     noise_factor = 0.05
 
@@ -42,9 +47,9 @@ NN_test = torch.from_numpy(NN_search_obj.kneighbors(locs_test, m, return_distanc
 NN_train_rev = NN_train[:, torch.arange(m, -1, -1)]
 NN_test_rev = NN_test[:, torch.arange(m - 1, -1, -1)]
 
-size_DT_mean = [d + 1, 96, 96, 4] 
+size_DT_mean = [nfeature_mean, 96, 96, 4] 
 size_TG_mean = [4, 96, 96, 1]
-size_DT_sd = [d, 64, 64, 3] 
+size_DT_sd = [nfeature_sd, 64, 64, 3] 
 size_TG_sd = [3, 32, 32, 1]
 model_mean = NNDT_Sum_NNTG(size_DT_mean, size_TG_mean, dropout=dropout_ratio)
 model_sd = NNDT_Sum_NNTG(size_DT_sd, size_TG_sd, dropout=dropout_ratio)
@@ -52,11 +57,11 @@ model_mean.to(device)
 model_sd.to(device)
 
 locs_batch_test = torch.cat((locs_train[NN_test_rev, :], locs_test.unsqueeze(1)), dim=1)
-locs_batch_test = locs_batch_test - locs_batch_test[:, -1:, :]
 y_batch_test = torch.cat((y_train[NN_test_rev], torch.zeros(n_test, 1)), dim=-1)
-locs_and_y_batch_test = torch.cat((locs_batch_test, y_batch_test.unsqueeze(-1)), dim=-1)
-locs_batch_test, y_test, locs_and_y_batch_test = locs_batch_test.to(device), \
-    y_test.to(device), locs_and_y_batch_test.to(device)
+input_mean_test = input_transform(locs_batch_test, y_batch_test.unsqueeze(-1), type=input_trans_mean)
+input_sd_test = input_transform(locs_batch_test, None, type=input_trans_sd)
+input_mean_test, input_sd_test, y_test = input_mean_test.to(device), input_sd_test.to(device), \
+    y_test.to(device)
 
 # scheduler
 def lr_lambda(epoch):
@@ -83,14 +88,14 @@ for epoch in range(n_epoch):
                 y_sd.unsqueeze(0) * noise_factor * torch.randn_like(y_batch)
         y_true = y_batch[:, -1].clone()
         y_batch[torch.arange(n_batch), m] = 0.0
-        locs_batch = locs_batch - locs_batch[:, -1:, :]
-        locs_and_y_batch = torch.cat((locs_batch, y_batch.unsqueeze(-1)), dim=-1)
-        locs_batch, y_true, locs_and_y_batch = locs_batch.to(device), \
-            y_true.to(device), locs_and_y_batch.to(device)
+        input_mean = input_transform(locs_batch, y_batch.unsqueeze(-1), type=input_trans_mean)
+        input_sd = input_transform(locs_batch, None, type=input_trans_sd)
+        input_mean, input_sd, y_true = input_mean.to(device), \
+            input_sd.to(device), y_true.to(device)
     # predict mean and stderr
     optimizer.zero_grad()
-    y_pred = model_mean(locs_and_y_batch, length=m+1)
-    y_stderr = torch.exp(model_sd(locs_batch, length=m+1))
+    y_pred = model_mean(input_mean, length=m+1)
+    y_stderr = torch.exp(model_sd(input_sd, length=m+1))
     loss = loss_function(y_pred, y_true, y_stderr)
     loss.backward()
     optimizer.step()
@@ -103,8 +108,8 @@ for epoch in range(n_epoch):
         print(f"Current LR: {crt_lr}", flush=True)
         print(f"Loss after {epoch} iterations is {loss.detach().item()}", flush=True)
         with torch.no_grad():
-            y_pred_test = model_mean(locs_and_y_batch_test, length=m+1)
-            y_stderr_test = torch.exp(model_sd(locs_batch_test, length=m+1))
+            y_pred_test = model_mean(input_mean_test, length=m+1)
+            y_stderr_test = torch.exp(model_sd(input_sd_test, length=m+1))
             loss_test = loss_function(y_pred_test, y_test, y_stderr_test)
             print(f"Loss of the testing dataset is {loss_test.detach().item()}", flush=True)
 timer_prev = timer
@@ -116,8 +121,8 @@ print(f"Loss after {epoch} iterations is {loss.detach().item()}", flush=True)
 model_mean.eval()
 model_sd.eval()
 with torch.no_grad():
-    y_pred_test = model_mean(locs_and_y_batch_test, length=m+1)
-    y_stderr_test = torch.exp(model_sd(locs_batch_test, length=m+1))
+    y_pred_test = model_mean(input_mean_test, length=m+1)
+    y_stderr_test = torch.exp(model_sd(input_sd_test, length=m+1))
     loss_test = loss_function(y_pred_test, y_test, y_stderr_test)
     print(f"Loss of the testing dataset is {loss_test.detach().item()}", flush=True)
 

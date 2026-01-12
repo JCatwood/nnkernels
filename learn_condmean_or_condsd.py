@@ -14,29 +14,34 @@ target = 'cond_mean'
 fixed_len = False
 input_trans_type = 'dist_direction_and_y'
 nfeatures = input_transformed_dim(d, input_trans_type)
-# the latent dim is 3
-if target == 'cond_sd':
-    size_ST = [nfeatures, 64, 64, 3] 
-    size_TG = [3, 32, 32, 1]
+if torch.cuda.is_available():
+    device = torch.device('cuda')
+    print(f"GPU is available. Using device: {torch.cuda.get_device_name(0)}")
+    size_ST = [nfeatures, 128, 128, 8] 
+    size_TG = [8, 128, 128, 1]
+    n_batch = 2048
+    n_epoch = 10000
 else:
-# the latent dim is 4
-    size_ST = [nfeatures, 96, 96, 4] 
-    size_TG = [4, 96, 96, 1]
-n_epoch = 4000
-n_batch = 1000
+    print("GPU is not available. Using CPU.")
+    device = torch.device('cpu')
+    size_ST = [nfeatures, 64, 64, 8] 
+    size_TG = [8, 64, 64, 1]
+    n_batch = 1024
+    n_epoch = 4000
 
 if target == "cond_sd":
     seq_func = prepare_sequence_cond_sd
 else:
     seq_func = prepare_sequence_cond_mean
 model = NNDT_Sum_NNTG(size_ST, size_TG)
+model.to(device)
 
 # scheduler
 def lr_lambda(epoch):
-    # base_lr = 0.001
-    # factor = 0.001
-    # return base_lr/(1+factor*epoch)
-    return 0.001
+    base_lr = 0.001
+    factor = 0.0003
+    return base_lr/(1+factor*epoch)
+    # return 0.001
 
 loss_function = torch.nn.MSELoss()
 optimizer = torch.optim.Adam(model.parameters(), lr=1)
@@ -44,14 +49,6 @@ scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda)
 kernel_gpt = gpytorch.kernels.MaternKernel(1.5)
 kernel_gpt.lengthscale = 0.3
 kernel = MyMaternKernel(1.0, 0.3, 1.5, 0.01)
-
-if torch.cuda.is_available():
-    device = torch.device('cuda')
-    print(f"GPU is available. Using device: {torch.cuda.get_device_name(0)}")
-else:
-    print("GPU is not available. Using CPU.")
-    device = torch.device('cpu')
-model.to(device)
 
 model.train()
 timer = time.perf_counter()
