@@ -13,6 +13,10 @@ def input_transformed_dim(d, type="locs_diff"):
         return 2 * d + 1
     elif type == "dist_direction_lastloc_and_y":
         return 2 * d + 2
+    elif type == "locs_lastloc":
+        return 2 * d
+    elif type == "locs_lastloc_and_y":
+        return 2 * d + 1
     
 def input_transform(locs_batch, y_batch=None, length=None, type="locs_diff"):
     """
@@ -53,7 +57,7 @@ def input_transform(locs_batch, y_batch=None, length=None, type="locs_diff"):
         dist = torch.linalg.norm(locs_batch_trans, dim=-1, keepdim=True)
         direction = locs_batch_trans / dist
         direction[torch.arange(n_batch), length - 1, :] = 0
-        lastloc_batch_vew = lastloc_batch.view(n_batch, length_max, d)
+        lastloc_batch_vew = lastloc_batch.expand(n_batch, length_max, d)
         return torch.cat((dist, direction, lastloc_batch_vew), dim=-1)
     elif type == "dist_direction_lastloc_and_y":
         lastloc_batch = locs_batch[torch.arange(n_batch), length - 1, :].unsqueeze(1)
@@ -61,9 +65,19 @@ def input_transform(locs_batch, y_batch=None, length=None, type="locs_diff"):
         dist = torch.linalg.norm(locs_batch_trans, dim=-1, keepdim=True)
         direction = locs_batch_trans / dist
         direction[torch.arange(n_batch), length - 1, :] = 0
-        lastloc_batch_vew = lastloc_batch.view(n_batch, length_max, d)
+        lastloc_batch_vew = lastloc_batch.expand(n_batch, length_max, d)
         y_batch_trans = y_batch.clone()
         y_batch_trans[torch.arange(n_batch), length - 1, :] = 0
         return torch.cat((dist, direction, lastloc_batch_vew, y_batch_trans), dim=-1)
+    elif type == "locs_lastloc":
+        lastloc_batch = locs_batch[torch.arange(n_batch), length - 1, :].unsqueeze(1)
+        lastloc_batch_vew = lastloc_batch.expand(n_batch, length_max, d)
+        return torch.cat((locs_batch, lastloc_batch_vew), dim=-1)
+    elif type == "locs_lastloc_and_y":
+        lastloc_batch = locs_batch[torch.arange(n_batch), length - 1, :].unsqueeze(1)
+        lastloc_batch_vew = lastloc_batch.expand(n_batch, length_max, d)
+        y_batch_trans = y_batch.clone()
+        y_batch_trans[torch.arange(n_batch), length - 1, :] = 0
+        return torch.cat((locs_batch, lastloc_batch_vew, y_batch_trans), dim=-1)
 
 

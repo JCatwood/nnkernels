@@ -2,7 +2,7 @@ import torch
 import gpytorch
 import time
 
-from models import NNDT_Sum_NNTG, GPVecchia, MyMaternKernel
+from models import NNDT_Sum_NNTG, GPVecchia, MyMaternKernel, MyNSKernel_Scale, MyNSKernel_Lengthscale
 from loss import NllLoss
 from data_sim import prepare_sequence_locs_and_y
 from input_transform import input_transformed_dim, input_transform
@@ -13,10 +13,12 @@ d = 2 # locs are sampled from R^d
 m = 30
 dropout_ratio = 0.0
 fixed_len = True
-input_trans_mean = "dist_direction_and_y"
-input_trans_sd = "dist_direction"
+input_trans_type = 'dist_direction_lastloc'
+input_trans_mean = input_trans_type + '_and_y'
+input_trans_sd = input_trans_type
 nfeature_mean = input_transformed_dim(d, input_trans_mean)
 nfeature_sd = input_transformed_dim(d, input_trans_sd)
+kernel_name = "MyNSKernel_Lengthscale" # ["MyMaternKernel", "MyNSKernel_Scale", "MyNSKernel_Lengthscale"]
 
 if torch.cuda.is_available():
     device = torch.device('cuda')
@@ -37,7 +39,16 @@ else:
     n_batch = 1024
     n_epoch = 4000
 
-kernel = MyMaternKernel(1.0, 0.3, 1.5, 0.01)
+if kernel_name == "MyMaternKernel":
+    kernel_parms = [1.0, 0.3, 1.5, 0.01]
+    Kernel_Cls = MyMaternKernel
+elif kernel_name == "MyNSKernel_Scale":
+    kernel_parms = [-0.5, -1.2, -1.44, 0.3, 1.5, 0.01]
+    Kernel_Cls = MyNSKernel_Scale
+elif kernel_name == "MyNSKernel_Lengthscale":
+    kernel_parms = [-0.5, -1.2, -1.44, 2.0, 0.01]
+    Kernel_Cls = MyNSKernel_Lengthscale
+kernel = Kernel_Cls(*kernel_parms)
 model_mean = NNDT_Sum_NNTG(size_DT_mean, size_TG_mean, dropout=dropout_ratio)
 model_sd = NNDT_Sum_NNTG(size_DT_sd, size_TG_sd, dropout=dropout_ratio)
 model_mean.to(device)
@@ -119,7 +130,7 @@ with torch.no_grad():
     print(f"NLL loss of the proposed model is {loss.detach().item()}", flush=True)
     print(f"MSE loss of the proposed model is {loss_MSE(y_pred, y_true).item()}", flush=True)
     
-    mdl_GP = GPVecchia(MyMaternKernel, *[1.0, 0.3, 1.5, 0.01]).to(device)
+    mdl_GP = GPVecchia(Kernel_Cls, *kernel_parms).to(device)
     y_pred_test_GP, y_stderr_test_GP = mdl_GP(locs_batch, y_batch, length=length)
     loss_test_GP = loss_function(y_pred_test_GP, y_true, y_stderr_test_GP)
     print(f"NLL loss of GP using the testing dataset is {loss_test_GP.detach().item()}", flush=True)

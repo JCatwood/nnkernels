@@ -4,21 +4,25 @@ import sys
 import time
 
 from data_sim import prepare_sequence_cond_sd, prepare_sequence_cond_mean
-from models import NNDT_Sum_NNTG, MyMaternKernel
+from models import NNDT_Sum_NNTG, MyMaternKernel, MyNSKernel_Scale, MyNSKernel_Lengthscale
 from input_transform import input_transformed_dim, input_transform
 
 torch.manual_seed(1)
 
 d = 2 # locs are sampled from R^d
-target = 'cond_mean'
+target = 'cond_sd' # ["cond_sd", "cond_mean"]
 fixed_len = False
-input_trans_type = 'dist_direction_and_y'
+input_trans_type = 'dist_direction_lastloc'
+aggregate_mtd = 'mean'
+if target == 'cond_mean':
+    input_trans_type += '_and_y'
 nfeatures = input_transformed_dim(d, input_trans_type)
+kernel_name = "MyNSKernel_Lengthscale" # ["MyMaternKernel", "MyNSKernel_Scale", "MyNSKernel_Lengthscale"]
 if torch.cuda.is_available():
     device = torch.device('cuda')
     print(f"GPU is available. Using device: {torch.cuda.get_device_name(0)}")
-    size_ST = [nfeatures, 128, 128, 8] 
-    size_TG = [8, 128, 128, 1]
+    size_ST = [nfeatures, 128, 128, 128, 16] 
+    size_TG = [16, 128, 128, 128, 1]
     n_batch = 2048
     n_epoch = 10000
 else:
@@ -27,28 +31,31 @@ else:
     size_ST = [nfeatures, 64, 64, 8] 
     size_TG = [8, 64, 64, 1]
     n_batch = 1024
-    n_epoch = 4000
+    n_epoch = 5000
 
 if target == "cond_sd":
     seq_func = prepare_sequence_cond_sd
 else:
     seq_func = prepare_sequence_cond_mean
-model = NNDT_Sum_NNTG(size_ST, size_TG)
+model = NNDT_Sum_NNTG(size_ST, size_TG, aggregate_mtd=aggregate_mtd)
 model.to(device)
 
 # scheduler
 def lr_lambda(epoch):
     base_lr = 0.001
-    factor = 0.0003
+    factor = 0.0001
     return base_lr/(1+factor*epoch)
     # return 0.001
 
 loss_function = torch.nn.MSELoss()
 optimizer = torch.optim.Adam(model.parameters(), lr=1)
 scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda)
-kernel_gpt = gpytorch.kernels.MaternKernel(1.5)
-kernel_gpt.lengthscale = 0.3
-kernel = MyMaternKernel(1.0, 0.3, 1.5, 0.01)
+if kernel_name == "MyMaternKernel":
+    kernel = MyMaternKernel(1.0, 0.3, 1.5, 0.01)
+elif kernel_name == "MyNSKernel_Scale":
+    kernel = MyNSKernel_Scale(-0.5, -1.2, -1.44, 0.3, 1.5, 0.01)
+elif kernel_name == "MyNSKernel_Lengthscale":
+    kernel = MyNSKernel_Lengthscale(-0.5, -1.2, -1.44, 2.0, 0.01)
 
 model.train()
 timer = time.perf_counter()
