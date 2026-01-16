@@ -121,7 +121,7 @@ class GPVecchia(torch.nn.Module):
         n_max = locs_batch.size(1)
         covmat = self.kernel(locs_batch)
         L = torch.linalg.cholesky(covmat).to_dense()
-        x = torch.linalg.solve_triangular(L, y_batch.unsqueeze(-1), upper=False)
+        x = torch.linalg.solve_triangular(L, y_batch.reshape(N, n_max, 1), upper=False)
         L_zero_diag = L - L * torch.eye(n_max).unsqueeze(0).to(L.device)
         cond_mean_tmp = L_zero_diag @ x
         
@@ -130,7 +130,7 @@ class GPVecchia(torch.nn.Module):
             cond_mean = cond_mean_tmp[:, -1, 0]
         else:
             cond_sd = L[torch.arange(N), length - 1, length - 1]
-            cond_mean = cond_mean_tmp[:, length - 1, 0]
+            cond_mean = cond_mean_tmp[torch.arange(N), length - 1, 0]
         
         return cond_mean, cond_sd
 

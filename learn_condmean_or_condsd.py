@@ -3,21 +3,23 @@ import gpytorch
 import sys
 import time
 
-from data_sim import prepare_sequence_cond_sd, prepare_sequence_cond_mean
+from dataloader import Vecc_Dataloader_GP_sim
 from models import NNDT_Sum_NNTG, MyMaternKernel, MyNSKernel_Scale, MyNSKernel_Lengthscale
 from input_transform import input_transformed_dim, input_transform
 
 torch.manual_seed(1)
-
+# %% tuning parameters
 d = 2 # locs are sampled from R^d
 target = 'cond_sd' # ["cond_sd", "cond_mean"]
 fixed_len = False
 input_trans_type = 'dist_direction_lastloc'
-aggregate_mtd = 'mean'
+aggregate_mtd = 'sum'
+m = 30
 if target == 'cond_mean':
     input_trans_type += '_and_y'
 nfeatures = input_transformed_dim(d, input_trans_type)
-kernel_name = "MyNSKernel_Lengthscale" # ["MyMaternKernel", "MyNSKernel_Scale", "MyNSKernel_Lengthscale"]
+kernel_name = "MyMaternKernel" # ["MyMaternKernel", "MyNSKernel_Scale", "MyNSKernel_Lengthscale"]
+# %% model parameters
 if torch.cuda.is_available():
     device = torch.device('cuda')
     print(f"GPU is available. Using device: {torch.cuda.get_device_name(0)}")
@@ -32,46 +34,37 @@ else:
     size_TG = [8, 64, 64, 1]
     n_batch = 1024
     n_epoch = 5000
-
-if target == "cond_sd":
-    seq_func = prepare_sequence_cond_sd
-else:
-    seq_func = prepare_sequence_cond_mean
-model = NNDT_Sum_NNTG(size_ST, size_TG, aggregate_mtd=aggregate_mtd)
-model.to(device)
-
-# scheduler
-def lr_lambda(epoch):
-    base_lr = 0.001
-    factor = 0.0001
-    return base_lr/(1+factor*epoch)
-    # return 0.001
-
-loss_function = torch.nn.MSELoss()
-optimizer = torch.optim.Adam(model.parameters(), lr=1)
-scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda)
+# %% define covariance kernel
 if kernel_name == "MyMaternKernel":
     kernel = MyMaternKernel(1.0, 0.3, 1.5, 0.01)
 elif kernel_name == "MyNSKernel_Scale":
     kernel = MyNSKernel_Scale(-0.5, -1.2, -1.44, 0.3, 1.5, 0.01)
 elif kernel_name == "MyNSKernel_Lengthscale":
     kernel = MyNSKernel_Lengthscale(-0.5, -1.2, -1.44, 2.0, 0.01)
-
+# %% dataloader
+dataloader = Vecc_Dataloader_GP_sim(kernel, d, fixed_len, m + 1, target=target)
+# %% initialize model
+model = NNDT_Sum_NNTG(size_ST, size_TG, aggregate_mtd=aggregate_mtd)
+model.to(device)
+# %% scheduler
+def lr_lambda(epoch):
+    base_lr = 0.001
+    factor = 0.0001
+    return base_lr/(1+factor*epoch)
+    # return 0.001
+# %% loss func
+loss_function = torch.nn.MSELoss()
+optimizer = torch.optim.Adam(model.parameters(), lr=1)
+scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda)
+# %% model training
 model.train()
 timer = time.perf_counter()
 for epoch in range(n_epoch): 
-    # simulate training data
-    if fixed_len:
-        length = 10
-    else:
-        length = torch.randint(1, 30, (n_batch,))
     with torch.no_grad():
-        X_batch, y = seq_func(length, kernel, nbatch=n_batch, d=d)
+        locs_batch, y_batch, y, length = dataloader.get_minibatch(size=n_batch)
         if target == 'cond_mean':
-            locs_batch, y_batch = X_batch[:, :, :d], X_batch[:, :, d:]
             X_batch_trans = input_transform(locs_batch, y_batch, length, input_trans_type)
         else:
-            locs_batch = X_batch
             X_batch_trans = input_transform(locs_batch, None, length, input_trans_type)
         X_batch_trans, y = X_batch_trans.to(device), y.to(device)
     # predict the target
