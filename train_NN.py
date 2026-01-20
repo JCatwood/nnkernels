@@ -120,11 +120,10 @@ for epoch in range(n_epoch):
         X_batch, y_batch, y_true, length = dataloader.get_minibatch(size=n_batch)
         input_mean = input_transform(X_batch, y_batch, length, type=input_trans_mean)
         input_sd = input_transform(X_batch, None, length, type=input_trans_sd)
-        input_mean, input_sd, y_true, length = (
+        input_mean, input_sd, y_true = (
             input_mean.to(device),
             input_sd.to(device),
             y_true.to(device),
-            length.to(device),
         )
     # predict mean and stderr
     optimizer.zero_grad()
