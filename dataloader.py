@@ -2,74 +2,6 @@ import torch
 import pandas
 from sklearn.neighbors import NearestNeighbors
 
-def prepare_sequence_cond_sd(length, kernel, nbatch=1, d=2):
-    if isinstance(length, int):
-        locs = torch.rand([nbatch, length, d])
-        covmat = kernel(locs)
-        L = torch.linalg.cholesky(covmat)
-        return locs, L.to_dense()[:, -1, -1]
-    else:
-        assert len(length) == nbatch
-        length_max = max(length)
-        locs = torch.rand([nbatch, length_max, d])
-        covmat = kernel(locs)
-        L = torch.linalg.cholesky(covmat)
-        mask = torch.arange(length_max).reshape(1, -1) < length.reshape(-1, 1)
-        locs[~mask, :] = 0
-        return locs, L.to_dense()[torch.arange(nbatch), length - 1, length - 1]
-
-def prepare_sequence_cond_mean(length, kernel, nbatch=1, d=2):
-    if isinstance(length, int):
-        locs = torch.rand([nbatch, length, d])
-        covmat = kernel(locs)
-        L = torch.linalg.cholesky(covmat)
-        x = torch.normal(0.0, 1.0, (nbatch, length, 1))
-        y = L @ x
-        cond_mean = (L[:, (length - 1):, :(length - 1)] @ x[:, :(length - 1), :]).squeeze()
-        y[:, -1, :] = 0
-        locs_and_y = torch.cat((locs, y), -1)
-        return locs_and_y, cond_mean
-    else:
-        assert len(length) == nbatch
-        length_max = max(length)
-        locs = torch.rand([nbatch, length_max, d])
-        covmat = kernel(locs)
-        L = torch.linalg.cholesky(covmat)
-        x = torch.normal(0.0, 1.0, (nbatch, length_max, 1))
-        y = L @ x
-        cond_mean = y[:, :, 0] - \
-            L[:, torch.arange(length_max), torch.arange(length_max)] * x[:, :, 0]
-        cond_mean = cond_mean[torch.arange(nbatch), length - 1]
-        mask = torch.arange(length_max).reshape(1, -1) < length.reshape(-1, 1)
-        locs[~mask, :] = 0
-        y[~mask, :] = 0
-        y[torch.arange(nbatch), length - 1, :] = 0
-        locs_and_y = torch.cat((locs, y), -1)
-        return locs_and_y, cond_mean
-    
-def prepare_sequence_locs_and_y(length, kernel, nbatch=1, d=2):
-    assert isinstance(length, int)
-    locs = torch.rand([nbatch, length, d])
-    covmat = kernel(locs)
-    L = torch.linalg.cholesky(covmat)
-    x = torch.normal(0.0, 1.0, (nbatch, length, 1))
-    y = (L @ x).squeeze(-1)
-    return locs, y
-    
-
-def sim_GP(nTrain, nTest, kernel, d=2):
-    n = nTrain + nTest
-    locs = torch.rand([n, d])
-    covmat = kernel(locs)
-    L = torch.linalg.cholesky(covmat)
-    x = torch.normal(0.0, 1.0, (n, 1))
-    y = (L @ x).squeeze()
-    locs_train = locs[:nTrain, :]
-    locs_test = locs[nTrain:, :]
-    y_train = y[:nTrain]
-    y_test = y[nTrain:]
-    return locs_train, locs_test, y_train, y_test
-
 class Vecc_Dataloader_GP_sim:
     def __init__(self, kernel, d=2, fixed_length=False, length_max=30, target=('y', 'cond_mean', 'cond_sd')):
         self.kernel = kernel
@@ -127,9 +59,13 @@ Returns
 tuple
     a tuple of X and y, features and labels
 """
-def _read_data(name, sep=",", type="train", floattype=torch.float32):
-    file_path_X = f"./data/{name}/{type}/X.csv"
-    file_path_y = f"./data/{name}/{type}/y.csv"
+def _read_data(name, sep=",", seed=None, type="train", floattype=torch.float32):
+    if seed is None:
+        file_path_X = f"./data/{name}/{type}/x.csv"
+        file_path_y = f"./data/{name}/{type}/y.csv"
+    else:
+        file_path_X = f"./data/{name}/seed_{seed}/{type}/x.csv"
+        file_path_y = f"./data/{name}/seed_{seed}/{type}/y.csv"
 
     try:
         X = torch.tensor(pandas.read_csv(file_path_X, sep=sep, header=None).values,
@@ -196,7 +132,9 @@ class Vecc_Dataloader_Dataset:
 
     def get_minibatch(self, ind=None, size:int = 1024, *args, **kwargs):
         if self.NN_train_rev is None or self.NN_test_rev is None:
+            print("Updating NN array...")
             self.update_NN_scale()
+            print("Done")
 
         if ind is None:
             ind = torch.randperm(self.n_train)[:size]
@@ -217,14 +155,21 @@ class Vecc_Dataloader_Dataset:
     
     def get_test_batch(self, ind=None, size:int = 1024, *args, **kwargs):
         if self.NN_train_rev is None or self.NN_test_rev is None:
+            print("Updating NN array...")
             self.update_NN_scale()
+            print("Done")
             
         if ind is None:
+            if size > self.n_test:
+                size = self.n_test
+                print("In get_test_batch, the input size is bigger than n_test, using n_test instead")
             ind = torch.randperm(self.n_test)[:size]
         else:
             size = len(ind)
-        X_batch = torch.cat((self.X_train[self.NN_test_rev[ind, :], :], self.X_test[ind, :].reshape(size, 1, self.d)), dim=1)
-        y_batch = torch.cat((self.y_train[self.NN_test_rev[ind, :], :], torch.zeros(size, 1, 1)), dim=1)
+        X_batch = torch.cat((self.X_train[self.NN_test_rev[ind, :], :], 
+                             self.X_test[ind, :].reshape(size, 1, self.d)), dim=1)
+        y_batch = torch.cat((self.y_train[self.NN_test_rev[ind, :], :], 
+                             torch.zeros(size, 1, 1)), dim=1)
         length = torch.full((size,), self.length_max)
         target = self.y_test[ind, 0].clone()
         return X_batch, y_batch, target, length

@@ -1,5 +1,6 @@
 import torch
 import time
+import sys
 
 from models import NNDT_Sum_NNTG, GPVecchia, MyMaternKernel, MyNSKernel_Scale, MyNSKernel_Lengthscale
 from loss import NllLoss
@@ -10,16 +11,37 @@ torch.manual_seed(1)
 # %% tuning parameters
 d = 2 # locs are sampled from R^d
 m = 30
-dropout_ratio = 0.0
-fixed_len = True
-train_type = "simulation" # ["simulation", "data"]
+dropout_ratio = 0.5
 input_trans_type = 'dist_direction_lastloc'
 input_trans_mean = input_trans_type + '_and_y'
 input_trans_sd = input_trans_type
 nfeature_mean = input_transformed_dim(d, input_trans_mean)
 nfeature_sd = input_transformed_dim(d, input_trans_sd)
-kernel_name = "MyNSKernel_Scale" # ["MyMaternKernel", "MyNSKernel_Scale", "MyNSKernel_Lengthscale"]
-data_name = "" # []
+if len(sys.argv) > 1:
+    if sys.argv[1].lower().strip() in ('yes', 'true', 't', 'y', '1', 'on'):
+        fixed_len = True
+    elif sys.argv[1].lower().strip() in ('no', 'false', 'f', 'n', '0', 'off'):
+        fixed_len = False
+    else:
+        raise ValueError(f"Invalid boolean value: '{sys.argv[1]}'")
+    train_type = sys.argv[2]
+    assert train_type in ('data', 'simulation'), "Invalid train_type (second) argument"
+    if train_type == 'simulation':
+        kernel_gen_name = sys.argv[3]
+        assert kernel_gen_name in ("MyMaternKernel", "MyNSKernel_Scale", "MyNSKernel_Lengthscale"), \
+            "Invalid kernel_gen_name (third) arguments"
+    else:
+        data_name = sys.argv[3]
+        if len(sys.argv) > 4:
+            data_seed = int(sys.argv[4])
+        else:
+            data_seed = None
+else:
+    fixed_len = True
+    train_type = "data" # ["simulation", "data"]
+    kernel_gen_name = "MyNSKernel_Scale" # ["MyMaternKernel", "MyNSKernel_Scale", "MyNSKernel_Lengthscale"]
+    data_name = "GP_NS_scale_2000_1000"
+    data_seed = 0
 # %% model parameters
 if torch.cuda.is_available():
     device = torch.device('cuda')
@@ -42,15 +64,18 @@ else:
 # %% dataloader
 if train_type == "simulation":
     # define covariance kernel used for generating data
-    if kernel_name == "MyMaternKernel":
+    if kernel_gen_name == "MyMaternKernel":
         kernel_gen = MyMaternKernel(1.0, 0.3, 1.5, 0.01)
-    elif kernel_name == "MyNSKernel_Scale":
+    elif kernel_gen_name == "MyNSKernel_Scale":
         kernel_gen = MyNSKernel_Scale(-0.5, -1.2, -1.44, 0.3, 1.5, 0.01)
-    elif kernel_name == "MyNSKernel_Lengthscale":
+    elif kernel_gen_name == "MyNSKernel_Lengthscale":
         kernel_gen = MyNSKernel_Lengthscale(-0.5, -1.2, -1.44, 2.0, 0.01)
     dataloader = Vecc_Dataloader_GP_sim(kernel_gen, d, fixed_len, m + 1, target='y')
 elif train_type == "data":
-    dataloader = Vecc_Dataloader_Dataset(data_name, fixed_len, length_max=m + 1)
+    if data_seed is None:
+        dataloader = Vecc_Dataloader_Dataset(data_name, fixed_len, length_max=m + 1)
+    else:
+        dataloader = Vecc_Dataloader_Dataset(data_name, fixed_len, length_max=m + 1, seed=data_seed)
 else:
     raise Exception("Unexpected train_type")
 # %% initialize model

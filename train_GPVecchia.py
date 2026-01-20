@@ -1,5 +1,5 @@
 import torch
-import gpytorch
+import sys
 import time
 
 from models import GPVecchia, MyMaternKernel, MyNSKernel_Scale, MyNSKernel_Lengthscale
@@ -10,12 +10,36 @@ torch.manual_seed(1)
 # %% tuning parameters
 d = 2 # locs are sampled from R^d
 m = 30
-dropout_ratio = 0.0
-fixed_len = True
-train_type = "simulation" # ["simulation", "data"]
-data_name = "" # []
-kernel_gen_name = "MyNSKernel_Scale" # ["MyMaternKernel", "MyNSKernel_Scale", "MyNSKernel_Lengthscale"]
-kernel_train_name = "MyMaternKernel" # ["MyMaternKernel", "MyNSKernel_Scale", "MyNSKernel_Lengthscale"]
+if len(sys.argv) > 1:
+    if sys.argv[1].lower().strip() in ('yes', 'true', 't', 'y', '1', 'on'):
+        fixed_len = True
+    elif sys.argv[1].lower().strip() in ('no', 'false', 'f', 'n', '0', 'off'):
+        fixed_len = False
+    else:
+        raise ValueError(f"Invalid boolean value: '{sys.argv[1]}'")
+    kernel_train_name = sys.argv[2]
+    assert kernel_train_name in ("MyMaternKernel", "MyNSKernel_Scale", "MyNSKernel_Lengthscale"), \
+            "Invalid kernel_train_name (second) arguments"
+    train_type = sys.argv[3]
+    assert train_type in ('data', 'simulation'), "Invalid train_type (third) argument"
+    if train_type == 'simulation':
+        kernel_gen_name = sys.argv[4]
+        assert kernel_gen_name in ("MyMaternKernel", "MyNSKernel_Scale", "MyNSKernel_Lengthscale"), \
+            "Invalid kernel_gen_name (fourth) arguments"
+    else:
+        data_name = sys.argv[4]
+        if len(sys.argv) > 5:
+            data_seed = int(sys.argv[5])
+        else:
+            data_seed = None
+else:
+    fixed_len = True
+    train_type = "data" # ["simulation", "data"]
+    data_name = "GP_NS_scale_2000_1000"
+    data_seed = 0
+    kernel_gen_name = "MyNSKernel_Scale" # ["MyMaternKernel", "MyNSKernel_Scale", "MyNSKernel_Lengthscale"]
+    kernel_train_name = "MyMaternKernel" # ["MyMaternKernel", "MyNSKernel_Scale", "MyNSKernel_Lengthscale"]
+
 # %% model parameters
 if torch.cuda.is_available():
     device = torch.device('cuda')
@@ -38,12 +62,15 @@ if train_type == "simulation":
         kernel_gen = MyNSKernel_Lengthscale(-0.5, -1.2, -1.44, 2.0, 0.01)
     dataloader = Vecc_Dataloader_GP_sim(kernel_gen, d, fixed_len, m + 1, target='y')
 elif train_type == "data":
-    dataloader = Vecc_Dataloader_Dataset(data_name, fixed_len, length_max=m + 1)
+    if data_seed is None:
+        dataloader = Vecc_Dataloader_Dataset(data_name, fixed_len, length_max=m + 1)
+    else:
+        dataloader = Vecc_Dataloader_Dataset(data_name, fixed_len, length_max=m + 1, seed=data_seed)
 else:
     raise Exception("Unexpected train_type")
 # %% initialize model
 if kernel_train_name == "MyMaternKernel":
-    kernel_parms_init = [1.0, 0.3, 1.5, 0.01]
+    kernel_parms_init = [0.5, 0.1, 1.5, 0.01]
     KernelClass = MyMaternKernel
 elif kernel_train_name == "MyNSKernel_Scale":
     kernel_parms_init = [-0.5, -1.2, -1.44, 0.3, 1.5, 0.01]
