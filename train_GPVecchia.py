@@ -11,7 +11,7 @@ torch.manual_seed(1)
 # %% tuning parameters
 d = 2  # locs are sampled from R^d
 m = 30
-if len(sys.argv) > 1:
+if len(sys.argv) > 4:
     if sys.argv[1].lower().strip() in ("yes", "true", "t", "y", "1", "on"):
         fixed_len = True
     elif sys.argv[1].lower().strip() in ("no", "false", "f", "n", "0", "off"):

@@ -24,7 +24,7 @@ input_trans_mean = input_trans_type + "_and_y"
 input_trans_sd = input_trans_type
 nfeature_mean = input_transformed_dim(d, input_trans_mean)
 nfeature_sd = input_transformed_dim(d, input_trans_sd)
-if len(sys.argv) > 1:
+if len(sys.argv) > 3:
     if sys.argv[1].lower().strip() in ("yes", "true", "t", "y", "1", "on"):
         fixed_len = True
     elif sys.argv[1].lower().strip() in ("no", "false", "f", "n", "0", "off"):

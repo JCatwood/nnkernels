@@ -104,10 +104,12 @@ def _read_data(name, sep=",", seed=None, type="train", floattype=torch.float32):
     return X, y 
 
 class Vecc_Dataloader_Dataset:
-    def __init__(self, data_name, fixed_length=False, length_max=30, *args, **kwargs):
+    def __init__(self, data_name, fixed_length=True, length_max=30, *args, **kwargs):
         self.X_train, self.y_train = _read_data(data_name, type="train", *args, **kwargs)
         self.X_test, self.y_test = _read_data(data_name, type="test", *args, **kwargs)
         self.fixed_length = fixed_length
+        if fixed_length is False:
+            raise ValueError("fixed_length = False is currently unsupported")
         self.length_max = length_max
         self.NN_train_rev = None
         self.NN_test_rev = None
@@ -142,13 +144,7 @@ class Vecc_Dataloader_Dataset:
             size = len(ind)
         X_batch = self.X_train[self.NN_train_rev[ind, :], :]
         y_batch = self.y_train[self.NN_train_rev[ind, :], :]
-        if not self.fixed_length:
-            length = torch.randint(1, self.length_max, (size, ))
-            mask = torch.arange(self.length_max).reshape(1, -1) < length.reshape(-1, 1)
-            X_batch[~mask, :] = 0
-            y_batch[~mask, :] = 0
-        else:
-            length = torch.full((size,), self.length_max)
+        length = torch.full((size,), self.length_max)
         target = y_batch[torch.arange(size), length - 1, 0].clone()
         y_batch[torch.arange(size), length - 1, 0] = 0.0
         return X_batch, y_batch, target, length
