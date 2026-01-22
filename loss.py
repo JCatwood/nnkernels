@@ -12,3 +12,10 @@ class NllLoss(torch.nn.Module):
         constant = 0.5 * torch.log(torch.tensor(2.0 * torch.pi))
         nll = constant + torch.log(stderr) + 0.5 * (((pred - target) / stderr)**2)
         return torch.mean(nll)
+
+class MyMSELoss(torch.nn.MSELoss):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+    
+    def forward(self, pred, target, *args, **kwargs):
+        return super().forward(pred, target)
