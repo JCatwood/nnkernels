@@ -150,6 +150,7 @@ with torch.no_grad():
         f"For testing dataset, GPVecchia NLL {nll.detach().item()}, MSE {mse.detach().item()}",
         flush=True,
     )
+model_GPVecchia.to('cpu')
 
 # %% initialize NN
 model_NN_mean = NNDT_Sum_NNTG(size_DT_mean, size_TG_mean)
@@ -225,3 +226,22 @@ for prop_sim_data in prop_sim_data_lst:
                     f"For testing dataset, NN NLL {nll.detach().item()}, MSE {mse.detach().item()}",
                     flush=True,
                 )
+    with torch.no_grad():
+        y_pred = model_NN_mean(input_mean_test, length=length_test)
+        y_stderr = torch.exp(model_NN_sd(input_sd_test, length=length_test))
+        nll = loss_NLL(y_pred, y_true_test, y_stderr)
+        mse = loss_MSE(y_pred, y_true_test)
+    print(">>>")
+    output_dict = {
+        "data_type": train_type,
+        "data_name": data_name,
+        "seed": data_seed,
+        "model": "GPVecchia_NN",
+        "m": m,
+        "same_length": fixed_len,
+        "NLL": nll.item(),
+        "MSE": mse.item(),
+    }
+    output_str = json.dumps(output_dict)
+    print(output_str)
+    print("<<<")
