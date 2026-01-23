@@ -2,9 +2,11 @@ import torch
 import pandas
 from sklearn.neighbors import NearestNeighbors
 
-class Vecc_Dataloader_GP_sim:
-    def __init__(self, kernel, d=2, fixed_length=False, length_max=30, target=('y', 'cond_mean', 'cond_sd', 'inv_chol')):
-        self.kernel = kernel
+class Vecc_Dataloader_GP_sim(torch.nn.Module):
+    def __init__(self, KernelCls, kernel_parms, d=2, fixed_length=False, length_max=30, 
+                 target=('y', 'cond_mean', 'cond_sd', 'inv_chol')):
+        super().__init__()
+        self.kernel = KernelCls(*kernel_parms)
         self.d = d
         self.fixed_length = fixed_length
         self.length_max = length_max

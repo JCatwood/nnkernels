@@ -41,7 +41,7 @@ if len(sys.argv) > 4:
             data_seed = None
 else:
     fixed_len = True
-    train_type = "data"  # ["simulation", "data"]
+    train_type = "simulation"  # ["simulation", "data"]
     data_name = "GP_NS_scale_2000_1000"
     data_seed = 0
     kernel_gen_name = "MyNSKernel_Scale"  # ["MyMaternKernel", "MyNSKernel_Scale", "MyNSKernel_Lengthscale"]
@@ -62,12 +62,15 @@ else:
 if train_type == "simulation":
     # define covariance kernel used for generating data
     if kernel_gen_name == "MyMaternKernel":
-        kernel_gen = MyMaternKernel(1.0, 0.3, 1.5, 0.01)
+        kernel_parms_init = [1.0, 0.3, 1.5, 0.01]
+        KernelClass = MyMaternKernel
     elif kernel_gen_name == "MyNSKernel_Scale":
-        kernel_gen = MyNSKernel_Scale(-0.5, -1.2, -1.44, 0.3, 1.5, 0.01)
+        kernel_parms_init = [-0.5, -1.2, -1.44, 0.3, 1.5, 0.01]
+        KernelClass = MyNSKernel_Scale
     elif kernel_gen_name == "MyNSKernel_Lengthscale":
-        kernel_gen = MyNSKernel_Lengthscale(-0.5, -1.2, -1.44, 2.0, 0.01)
-    dataloader = Vecc_Dataloader_GP_sim(kernel_gen, d, fixed_len, m + 1, target="y")
+        kernel_parms_init = [-0.5, -1.2, -1.44, 2.0, 0.01]
+        KernelClass = MyNSKernel_Lengthscale
+    dataloader = Vecc_Dataloader_GP_sim(KernelClass, kernel_parms_init, d, fixed_len, m + 1, "y")
 elif train_type == "data":
     if data_seed is None:
         dataloader = Vecc_Dataloader_Dataset(data_name, fixed_len, length_max=m + 1)

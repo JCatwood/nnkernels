@@ -164,8 +164,9 @@ model_NN_mean.train()
 model_NN_sd.train()
 timer = time.perf_counter()
 dataloader_sim = Vecc_Dataloader_GP_sim(
-    copy.deepcopy(model_GPVecchia.kernel), d, fixed_len, m + 1, target="y"
+    KernelClass, kernel_parms_init, d, fixed_len, m + 1, target="y"
 )
+dataloader_sim.kernel.load_state_dict(model_GPVecchia.kernel.state_dict())
 input_mean_test = input_transform(
     X_batch_test, y_batch_test, length_test, type=input_trans_mean
 )
