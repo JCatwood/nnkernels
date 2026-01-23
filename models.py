@@ -4,10 +4,14 @@ import gpytorch
 
 class NNDT_Sum_NNTG(torch.nn.Module):
     """
-    Given a tensor of dim [*, n, d], representing batches of n locs embeded in R^d, the
-    forward propogation first transforms each d-dimensional coordinate vector (last dimension), then aggregate (sum) across the n locs (2nd last dimension), finally pass the previous result though another NN to predict the target
+    Given a tensor of dim [*, n, d], representing batches of n locs embeded in R^d, 
+    if output == 'scalar'
+    the forward propogation first transforms each d-dimensional coordinate vector (last dimension), then aggregate (sum) across the n locs (2nd last dimension), finally pass the previous result though another NN to predict the target
+    otherwise
+    the aggregated vector across n locs is concatenated with each of the transformed vector and pass through another NN as different batches. The output will be of shape [*, n, 1], with correspondence to the input
     """
-    def __init__(self, NNDT_size_seq, NNTG_size_seq, dropout=0.0, aggregate_mtd='sum'):
+    def __init__(self, NNDT_size_seq, NNTG_size_seq, dropout=0.0, aggregate_mtd='sum', 
+                 output="scalar"):
         super().__init__()
         layers = []
         for i in range(len(NNDT_size_seq) - 1):
@@ -27,6 +31,9 @@ class NNDT_Sum_NNTG(torch.nn.Module):
 
         assert aggregate_mtd in ['sum', 'mean'], "aggregate_mtd must be one of ['sum', 'mean']"
         self.aggregate_mtd = aggregate_mtd
+        assert output in ['scalar', 'vector'], "output must be one of ['scalar', 'vector']"
+        self.output = output
+
     
     def forward(self, X, length=None):
         X_after_DT = self.DT(X)
@@ -48,8 +55,12 @@ class NNDT_Sum_NNTG(torch.nn.Module):
             elif self.aggregate_mtd == "mean":
                 length_float = length.to(X_after_DT.dtype).unsqueeze(-1)
                 X_after_sum = torch.sum(X_after_DT * mask_float, dim = -2) / length_float
-            
-        target = self.TG(X_after_sum).squeeze()
+        if self.output == "scalar":
+            target = self.TG(X_after_sum).squeeze()
+        else:
+            X_after_sum_view = X_after_sum.unsqueeze(-2).expand(*X_after_DT.shape)
+            input_cat = torch.cat((X_after_sum_view, X_after_DT), dim=-1)
+            target = self.TG(input_cat)
         return target
     
 class LSTM_NNTG(torch.nn.Module):

@@ -10,13 +10,15 @@ from input_transform import input_transformed_dim, input_transform
 torch.manual_seed(1)
 # %% tuning parameters
 d = 2 # locs are sampled from R^d
-target = 'cond_sd' # ["cond_sd", "cond_mean"]
-fixed_len = False
-input_trans_type = 'dist_direction_lastloc'
+target = 'inv_chol' # ["cond_sd", "cond_mean", "inv_chol"]
+fixed_len = True
+input_trans_type = 'locs_diff'
 aggregate_mtd = 'sum'
 m = 30
 if target == 'cond_mean':
     input_trans_type += '_and_y'
+if target == "inv_chol":
+    model_output = "vector"
 nfeatures = input_transformed_dim(d, input_trans_type)
 kernel_name = "MyMaternKernel" # ["MyMaternKernel", "MyNSKernel_Scale", "MyNSKernel_Lengthscale"]
 # %% model parameters
@@ -24,16 +26,22 @@ if torch.cuda.is_available():
     device = torch.device('cuda')
     print(f"GPU is available. Using device: {torch.cuda.get_device_name(0)}")
     size_ST = [nfeatures, 128, 128, 128, 16] 
-    size_TG = [16, 128, 128, 128, 1]
+    if model_output == "vector":
+        size_TG = [size_ST[-1] * 2, 128, 128, 128, 1]
+    else:
+        size_TG = [size_ST[-1], 128, 128, 128, 1]
     n_batch = 2048
-    n_epoch = 10000
+    n_epoch = 10001
 else:
     print("GPU is not available. Using CPU.")
     device = torch.device('cpu')
     size_ST = [nfeatures, 64, 64, 8] 
-    size_TG = [8, 64, 64, 1]
+    if model_output == "vector":
+        size_TG = [size_ST[-1] * 2, 64, 64, 1]
+    else:
+        size_TG = [size_ST[-1], 64, 64, 1]
     n_batch = 1024
-    n_epoch = 5000
+    n_epoch = 5001
 # %% define covariance kernel
 if kernel_name == "MyMaternKernel":
     kernel = MyMaternKernel(1.0, 0.3, 1.5, 0.01)
@@ -44,7 +52,7 @@ elif kernel_name == "MyNSKernel_Lengthscale":
 # %% dataloader
 dataloader = Vecc_Dataloader_GP_sim(kernel, d, fixed_len, m + 1, target=target)
 # %% initialize model
-model = NNDT_Sum_NNTG(size_ST, size_TG, aggregate_mtd=aggregate_mtd)
+model = NNDT_Sum_NNTG(size_ST, size_TG, aggregate_mtd=aggregate_mtd, output=model_output)
 model.to(device)
 # %% scheduler
 def lr_lambda(epoch):

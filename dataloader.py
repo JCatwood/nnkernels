@@ -3,7 +3,7 @@ import pandas
 from sklearn.neighbors import NearestNeighbors
 
 class Vecc_Dataloader_GP_sim:
-    def __init__(self, kernel, d=2, fixed_length=False, length_max=30, target=('y', 'cond_mean', 'cond_sd')):
+    def __init__(self, kernel, d=2, fixed_length=False, length_max=30, target=('y', 'cond_mean', 'cond_sd', 'inv_chol')):
         self.kernel = kernel
         self.d = d
         self.fixed_length = fixed_length
@@ -12,7 +12,7 @@ class Vecc_Dataloader_GP_sim:
             self.target = target[0]
         else:
             self.target = target
-        assert self.target in ['y', 'cond_mean', 'cond_sd'], "invalid target input"
+        assert self.target in ['y', 'cond_mean', 'cond_sd', 'inv_chol'], "invalid target input"
     
     def get_minibatch(self, ind=None, size:int = 1024, *args, **kwargs):
         locs_batch = torch.rand(size, self.length_max, self.d)
@@ -34,6 +34,11 @@ class Vecc_Dataloader_GP_sim:
                 L[torch.arange(size), length - 1, length - 1] * x[torch.arange(size), length - 1, 0]
         elif self.target == 'cond_sd':
             target = L[torch.arange(size), length - 1, length - 1]
+        elif self.target == "inv_chol":
+            assert self.fixed_length == True, "does not support different lengths when the target is inv_chol"
+            covmat_inv = torch.cholesky_inverse(L, upper=False)
+            target = covmat_inv[:, :, -1:] / \
+                (covmat_inv[:, -1:, -1:] ** 0.5)
         else:
             raise Exception("Unexpected self.target")
         y_batch[torch.arange(size), length - 1, :] = 0
