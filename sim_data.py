@@ -15,13 +15,22 @@ class ZeroMean(torch.nn.Module):
             n, d = x.size(0), x.size(1)
             return torch.zeros(n, 1)
 
-def sim_GP_data(mean_obj, kernel, n_train, n_test, d=2, kernel_name="kernelname", seed=1):
+
+class ParaboloidMean(torch.nn.Module):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+    def forward(self, x):
+        return torch.sum(x ** 2, dim=-1, keepdim=True)
+
+
+def sim_GP_data(mean_obj, kernel, n_train, n_test, d=2, mean_name="meanname", kernel_name="kernelname", seed=1):
     """
     Simulate spatial GP data where locs are randomly sampled from the unit hypercube in R^d
     """
     torch.manual_seed(seed)
 
-    fn = f"./data/GP_{kernel_name}_{n_train}_{n_test}/seed_{seed}/"
+    fn = f"./data/GP_d{d}_{mean_name}_{kernel_name}_{n_train}_{n_test}/seed_{seed}/"
     os.makedirs(fn + "train/", exist_ok=True)
     os.makedirs(fn + "test/", exist_ok=True)
 
@@ -44,10 +53,12 @@ def sim_GP_data(mean_obj, kernel, n_train, n_test, d=2, kernel_name="kernelname"
     df_y_test.to_csv(fn + "test/y.csv", index=False, header=False)
 
 if __name__ == "__main__":
-    # %% GP
+    # GP
     n_train = 2000
     n_test = 1000
-    mean_obj = ZeroMean()
+    d = 3
+    mean_obj_mean0 = ZeroMean()
+    mean_obj_Paraboloid = ParaboloidMean()
     kernel_Matern = MyMaternKernel(1.0, 0.3, 1.5, 0.01)
     kernel_NS_scale = MyNSKernel_Scale(-0.5, -1.2, -1.44, 0.3, 1.5, 0.01)
     kernel_NS_lengthrange = MyNSKernel_Lengthscale(-0.5, -1.2, -1.44, 2.0, 0.01)
@@ -55,4 +66,7 @@ if __name__ == "__main__":
                           ["Matern", "NS_scale", "NS_range"])
     for kernel, name in kernel_and_name:
         for seed in torch.arange(20):
-            sim_GP_data(mean_obj, kernel, n_train, n_test, kernel_name=name, seed=seed)
+            sim_GP_data(mean_obj_mean0, kernel, n_train, n_test, d=d,
+                        mean_name="mean0", kernel_name=name, seed=seed)
+            sim_GP_data(mean_obj_Paraboloid, kernel, n_train, n_test, d=d,
+                        mean_name="Paraboloid", kernel_name=name, seed=seed)

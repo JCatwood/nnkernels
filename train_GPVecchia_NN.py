@@ -17,13 +17,10 @@ from input_transform import input_transformed_dim, input_transform
 
 torch.manual_seed(1)
 # %% tuning parameters
-d = 2  # locs are sampled from R^d
 m = 30
 input_trans_type = "dist_direction_lastloc"
 input_trans_mean = input_trans_type + "_and_y"
 input_trans_sd = input_trans_type
-nfeature_mean = input_transformed_dim(d, input_trans_mean)
-nfeature_sd = input_transformed_dim(d, input_trans_sd)
 train_type = "data"
 fixed_len = True
 if len(sys.argv) > 2:
@@ -40,10 +37,21 @@ if len(sys.argv) > 2:
         data_seed = None
 else:
     kernel_train_name = "MyMaternKernel"
-    data_name = "GP_NS_range_2000_1000"
+    data_name = "GP_d3_Paraboloid_NS_range_2000_1000"
     data_seed = 0
 
+# %% dataloader
+if data_seed is None:
+    dataloader = Vecc_Dataloader_Dataset(data_name, fixed_len, length_max=m + 1)
+else:
+    dataloader = Vecc_Dataloader_Dataset(
+        data_name, fixed_len, length_max=m + 1, seed=data_seed
+    )
+d = dataloader.d
+
 # %% device and number of training iterations
+nfeature_mean = input_transformed_dim(d, input_trans_mean)
+nfeature_sd = input_transformed_dim(d, input_trans_sd)
 if torch.cuda.is_available():
     device = torch.device("cuda")
     print(f"GPU is available. Using device: {torch.cuda.get_device_name(0)}")
@@ -64,16 +72,9 @@ else:
     size_DT_sd = [nfeature_sd, 64, 64, 3]
     size_TG_sd = [3, 32, 32, 1]
     prop_sim_data_lst = [0.9, 0.7, 0.5]
-
-# %% dataloader
-if data_seed is None:
-    dataloader = Vecc_Dataloader_Dataset(data_name, fixed_len, length_max=m + 1)
-else:
-    dataloader = Vecc_Dataloader_Dataset(
-        data_name, fixed_len, length_max=m + 1, seed=data_seed
-    )
 if n_batch > dataloader.n_train:
     n_batch = dataloader.n_train
+
 # %% get test batch
 with torch.no_grad():
     X_batch_test, y_batch_test, y_true_test, length_test = dataloader.get_test_batch(
@@ -159,10 +160,6 @@ model_NN_mean.to(device)
 model_NN_sd.to(device)
 
 # %% model training
-optimizer = torch.optim.Adam(
-    [{"params": model_NN_mean.parameters()}, {"params": model_NN_sd.parameters()}], lr=1
-)
-scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda)
 model_NN_mean.train()
 model_NN_sd.train()
 timer = time.perf_counter()
@@ -178,6 +175,10 @@ input_sd_test = input_transform(
 for prop_sim_data in prop_sim_data_lst:
     n_batch_sim = int(n_batch * prop_sim_data)
     n_batch_data = n_batch - n_batch_sim
+    optimizer = torch.optim.Adam(
+    [{"params": model_NN_mean.parameters()}, {"params": model_NN_sd.parameters()}], lr=1
+)
+    scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda)
     for epoch in range(n_epoch):
         with torch.no_grad():
             X_batch_data, y_batch_data, y_true_data, length_data = (
@@ -239,6 +240,7 @@ for prop_sim_data in prop_sim_data_lst:
         "model": "GPVecchia_NN",
         "m": m,
         "same_length": fixed_len,
+        "prop_sim_data": prop_sim_data,
         "NLL": nll.item(),
         "MSE": mse.item(),
     }
