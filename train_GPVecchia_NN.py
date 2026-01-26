@@ -173,13 +173,13 @@ input_mean_test = input_transform(
 input_sd_test = input_transform(
     X_batch_test, None, length_test, type=input_trans_sd
 )
+optimizer = torch.optim.Adam(
+    [{"params": model_NN_mean.parameters()}, {"params": model_NN_sd.parameters()}], lr=1
+)
+scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda)
 for prop_sim_data in prop_sim_data_lst:
     n_batch_sim = int(n_batch * prop_sim_data)
     n_batch_data = n_batch - n_batch_sim
-    optimizer = torch.optim.Adam(
-    [{"params": model_NN_mean.parameters()}, {"params": model_NN_sd.parameters()}], lr=1
-)
-    scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda)
     for epoch in range(n_epoch):
         with torch.no_grad():
             X_batch_data, y_batch_data, y_true_data, length_data = (
@@ -248,3 +248,5 @@ for prop_sim_data in prop_sim_data_lst:
     output_str = json.dumps(output_dict)
     print(output_str)
     print("<<<")
+
+# %%

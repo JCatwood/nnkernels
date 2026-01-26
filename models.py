@@ -62,6 +62,44 @@ class NNDT_Sum_NNTG(torch.nn.Module):
             input_cat = torch.cat((X_after_sum_view, X_after_DT), dim=-1)
             target = self.TG(input_cat)
         return target
+
+class NNDT2_Sum_NNTG(torch.nn.Module):
+    """
+    Given a tensor of dim [*, n, d], representing batches of n locs embeded in R^d, 
+    the forward propogation first transforms each d-dimensional coordinate vector (last dimension) using DT1, then aggregate (sum) across the n locs (2nd last dimension), the aggregated vector across n locs is concatenated with each of the transformed input using DT2, and pass through another NN (TG) as different batches. The output will be of shape [*, n, 1], with correspondence to the input, finally pass the previous result though another NN to predict the target
+    """
+    def __init__(self, NNDT1_size_seq, NNDT2_size_seq, NNTG_size_seq, *args, **kwargs):
+        assert NNDT1_size_seq[-1] + NNDT2_size_seq[-1] == NNTG_size_seq[0], "size mismatch between DT1, DT2 and TG"
+        super().__init__()
+        layers = []
+        for i in range(len(NNDT1_size_seq) - 1):
+            layers.append(nn.Linear(NNDT1_size_seq[i], NNDT1_size_seq[i + 1]))
+            if i < len(NNDT1_size_seq) -  2:
+                layers.append(nn.ReLU())
+        self.DT1 = nn.Sequential(*layers)
+
+        layers = []
+        for i in range(len(NNDT2_size_seq) - 1):
+            layers.append(nn.Linear(NNDT2_size_seq[i], NNDT2_size_seq[i + 1]))
+            if i < len(NNDT2_size_seq) -  2:
+                layers.append(nn.ReLU())
+        self.DT2 = nn.Sequential(*layers)
+
+        layers = []
+        for i in range(len(NNTG_size_seq) - 1):
+            layers.append(nn.Linear(NNTG_size_seq[i], NNTG_size_seq[i + 1]))
+            if i < len(NNTG_size_seq) -  2:
+                layers.append(nn.ReLU())
+        self.TG = nn.Sequential(*layers)
+
+    
+    def forward(self, X, *args, **kwargs):
+        X_after_DT1 = self.DT1(X)
+        X_after_DT2 = self.DT2(X)
+        X_DT1_reduce = torch.sum(X_after_DT1, dim=-2, keepdim=True).expand(-1, X.size(-2), -1)
+        input_TG = torch.cat((X_DT1_reduce, X_after_DT2), dim=-1)
+        target = self.TG(input_TG)
+        return target
     
 class LSTM_NNTG(torch.nn.Module):
     """
