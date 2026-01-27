@@ -10,7 +10,7 @@ from input_transform import input_transformed_dim, input_transform
 torch.manual_seed(1)
 # %% tuning parameters
 d = 2 # locs are sampled from R^d
-target = 'inv_chol' # ["cond_sd", "cond_mean", "inv_chol"]
+target = 'inv_chol'
 fixed_len = True
 input_trans_type = 'locs_diff'
 aggregate_mtd = 'sum'
@@ -83,3 +83,9 @@ for epoch in range(n_epoch):
         print(f"Elapsed time: {timer - timer_prev} seconds", flush=True)
         crt_lr = optimizer.param_groups[0]["lr"]
         print(f"Current LR: {crt_lr}", flush=True)
+
+if torch.cuda.is_available():
+    model_state_fn = f"NN2_{target}_{input_trans_type}_{kernel_gen_name}_gpusize_loss{loss.detach().item()}.pt"
+else:
+    model_state_fn = f"NN2_{target}_{input_trans_type}_{kernel_gen_name}_cpusize_loss{loss.detach().item()}.pt"
+torch.save(model.state_dict(), model_state_fn)

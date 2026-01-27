@@ -94,12 +94,23 @@ class NNDT2_Sum_NNTG(torch.nn.Module):
 
     
     def forward(self, X, *args, **kwargs):
+        """
+        Output nonzero entries of columns in the inv Chol
+        """
         X_after_DT1 = self.DT1(X)
         X_after_DT2 = self.DT2(X)
         X_DT1_reduce = torch.sum(X_after_DT1, dim=-2, keepdim=True).expand(-1, X.size(-2), -1)
         input_TG = torch.cat((X_DT1_reduce, X_after_DT2), dim=-1)
         target = self.TG(input_TG)
         return target
+    
+    def cond_mean_and_cond_sd(self, X_batch, y_batch, *args, **kwargs):
+        inv_chol_col = self.forward(X_batch)
+        coeff = - inv_chol_col / inv_chol_col[:, -1:, :] # *, n, 1
+        cond_mean = torch.sum(coeff[:, :-1, :] * y_batch[:, :-1, :], dim=1) # *, 1
+        cond_sd = 1 / torch.abs(inv_chol_col[:, -1:, 0]) # *, 1
+        return cond_mean, cond_sd
+
     
 class LSTM_NNTG(torch.nn.Module):
     """
