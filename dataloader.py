@@ -30,12 +30,12 @@ class Vecc_Dataloader_GP_sim(torch.nn.Module):
         else:
             length = torch.full((size,), self.length_max)
         if self.target == 'y':
-            target = y_batch[torch.arange(size), length - 1, 0].clone()
+            target = y_batch[torch.arange(size), length - 1, 0].clone().unsqueeze(-1)
         elif self.target == 'cond_mean':
-            target = y_batch[torch.arange(size), length - 1, 0] - \
-                L[torch.arange(size), length - 1, length - 1] * x[torch.arange(size), length - 1, 0]
+            target = (y_batch[torch.arange(size), length - 1, 0] - \
+                L[torch.arange(size), length - 1, length - 1] * x[torch.arange(size), length - 1, 0]).unsqueeze(-1)
         elif self.target == 'cond_sd':
-            target = L[torch.arange(size), length - 1, length - 1]
+            target = L[torch.arange(size), length - 1, length - 1].unsqueeze(-1)
         elif self.target == "inv_chol":
             assert self.fixed_length == True, "does not support different lengths when the target is inv_chol"
             covmat_inv = torch.cholesky_inverse(L, upper=False)
@@ -152,7 +152,7 @@ class Vecc_Dataloader_Dataset:
         X_batch = self.X_train[self.NN_train_rev[ind, :], :]
         y_batch = self.y_train[self.NN_train_rev[ind, :], :]
         length = torch.full((size,), self.length_max)
-        target = y_batch[torch.arange(size), length - 1, 0].clone()
+        target = y_batch[torch.arange(size), length - 1, 0].clone().unsqueeze(-1)
         y_batch[torch.arange(size), length - 1, 0] = 0.0
         return X_batch, y_batch, target, length
     
@@ -174,5 +174,5 @@ class Vecc_Dataloader_Dataset:
         y_batch = torch.cat((self.y_train[self.NN_test_rev[ind, :], :], 
                              torch.zeros(size, 1, 1)), dim=1)
         length = torch.full((size,), self.length_max)
-        target = self.y_test[ind, 0].clone()
+        target = self.y_test[ind, 0].clone().unsqueeze(-1)
         return X_batch, y_batch, target, length

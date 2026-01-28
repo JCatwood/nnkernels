@@ -8,6 +8,11 @@ class NllLoss(torch.nn.Module):
         super().__init__()
 
     def forward(self, pred, target, stderr):
+        pred_view = pred.squeeze()
+        target_view = target.squeeze()
+        stderr_view = stderr.squeeze()
+        assert pred_view.shape == target_view.shape
+        assert stderr_view.shape == target_view.shape
         n = pred.size(0)
         constant = 0.5 * torch.log(torch.tensor(2.0 * torch.pi))
         nll = constant + torch.log(stderr) + 0.5 * (((pred - target) / stderr)**2)
@@ -18,4 +23,7 @@ class MyMSELoss(torch.nn.MSELoss):
         super().__init__(*args, **kwargs)
     
     def forward(self, pred, target, *args, **kwargs):
-        return super().forward(pred, target)
+        pred_view = pred.squeeze()
+        target_view = target.squeeze()
+        assert pred_view.shape == target_view.shape
+        return super().forward(pred_view, target_view)
