@@ -44,7 +44,7 @@ else:
     train_type = "simulation"  # ["simulation", "data"]
     data_name = "GP_NS_scale_2000_1000"
     data_seed = 0
-    kernel_gen_name = "MyNSKernel_Scale"  # ["MyMaternKernel", "MyNSKernel_Scale", "MyNSKernel_Lengthscale"]
+    kernel_gen_name = "MyNSKernel_Lengthscale"  # ["MyMaternKernel", "MyNSKernel_Scale", "MyNSKernel_Lengthscale"]
     kernel_train_name = "MyMaternKernel"  # ["MyMaternKernel", "MyNSKernel_Scale", "MyNSKernel_Lengthscale"]
 
 # %% model parameters
@@ -52,12 +52,12 @@ if torch.cuda.is_available():
     device = torch.device("cuda")
     print(f"GPU is available. Using device: {torch.cuda.get_device_name(0)}")
     n_batch = 2048
-    n_epoch = 30000
+    n_epoch = 30001
 else:
     print("GPU is not available. Using CPU.")
     device = torch.device("cpu")
     n_batch = 1024
-    n_epoch = 4000
+    n_epoch = 4001
 # %% dataloader
 if train_type == "simulation":
     # define covariance kernel used for generating data
@@ -130,11 +130,6 @@ for epoch in range(n_epoch):
         crt_lr = optimizer.param_groups[0]["lr"]
         print(f"Current LR: {crt_lr}", flush=True)
         print(f"Loss after {epoch} iterations is {loss.detach().item()}", flush=True)
-timer = time.perf_counter()
-print(f"Elapsed time: {timer - timer_prev} seconds", flush=True)
-crt_lr = optimizer.param_groups[0]["lr"]
-print(f"Current LR: {crt_lr}", flush=True)
-print(f"Loss after {epoch} iterations is {loss.detach().item()}", flush=True)
 # %% evaluate
 model.to("cpu")
 model.eval()

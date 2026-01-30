@@ -17,9 +17,9 @@ torch.manual_seed(1)
 # %% tuning parameters
 d = 2  # locs are sampled from R^d
 m = 30
-input_trans_type = "locs_diff"
+input_trans_type = "dist_direction_lastloc"
 nfeatures = input_transformed_dim(d, input_trans_type)
-fixed_len = True
+fixed_len = True # needs to be true for this experiment
 pre_trained_mdl_fn = None
 if len(sys.argv) > 2:
     train_type = sys.argv[1]
@@ -39,7 +39,7 @@ if len(sys.argv) > 2:
             data_seed = None
 else:
     train_type = "simulation"  # ["simulation", "data"]
-    kernel_gen_name = "MyNSKernel_Scale"  # ["MyMaternKernel", "MyNSKernel_Scale", "MyNSKernel_Lengthscale"]
+    kernel_gen_name = "MyNSKernel_Lengthscale"  # ["MyMaternKernel", "MyNSKernel_Scale", "MyNSKernel_Lengthscale"]
     data_name = "GP_NS_scale_2000_1000"
     data_seed = 0
 # %% model parameters
@@ -108,11 +108,14 @@ for epoch in range(n_epoch):
     with torch.no_grad():
         X_batch, y_batch, y_true, length = dataloader.get_minibatch(size=n_batch)
         input = input_transform(X_batch, None, length, type=input_trans_type)
+        input = input[:, :-1, :]
+        y_batch = y_batch[:, :-1, :]
         input, y_batch, y_true = input.to(device), y_batch.to(device), y_true.to(device)
     # predict mean and stderr
     optimizer.zero_grad()
-    y_pred, y_stderr = model.cond_mean_and_cond_sd(input, y_batch, length=length)
-    loss = loss_function(y_pred, y_true, y_stderr)
+    krig_coeff = model(input)
+    y_pred = torch.sum(krig_coeff * y_batch, dim=1)
+    loss = loss_function(y_pred, y_true, None)
     loss.backward()
     optimizer.step()
     scheduler.step()
@@ -134,8 +137,11 @@ with torch.no_grad():
             size=dataloader.n_test
         )
     input = input_transform(X_batch, None, length, type=input_trans_type)
-    y_pred, y_stderr = model.cond_mean_and_cond_sd(input, y_batch, length=length)
-    loss = loss_function(y_pred, y_true, y_stderr)
+    input = input[:, :-1, :]
+    y_batch = y_batch[:, :-1, :]
+    krig_coeff = model(input)
+    y_pred = torch.sum(krig_coeff * y_batch, dim=1)
+    loss = loss_function(y_pred, y_true, None)
     print(">>>")
     if train_type == "simulation":
         output_dict = {
@@ -148,7 +154,7 @@ with torch.no_grad():
             "size_TG": size_TG,
             "transformation": input_trans_type,
             "same_length": fixed_len,
-            "NLL": loss.detach().item(),
+            "Loss": loss.detach().item(),
             "MSE": loss_MSE(y_pred, y_true).item(),
         }
     else:
@@ -163,7 +169,7 @@ with torch.no_grad():
             "size_TG": size_TG,
             "transformation": input_trans_type,
             "same_length": fixed_len,
-            "NLL": loss.detach().item(),
+            "Loss": loss.detach().item(),
             "MSE": loss_MSE(y_pred, y_true).item(),
         }
     output_str = json.dumps(output_dict)

@@ -103,13 +103,6 @@ class NNDT2_Sum_NNTG(torch.nn.Module):
         input_TG = torch.cat((X_DT1_reduce, X_after_DT2), dim=-1)
         target = self.TG(input_TG)
         return target
-    
-    def cond_mean_and_cond_sd(self, X_batch, y_batch, *args, **kwargs):
-        inv_chol_col = self.forward(X_batch)
-        coeff = - inv_chol_col / inv_chol_col[:, -1:, :] # *, n, 1
-        cond_mean = torch.sum(coeff[:, :-1, :] * y_batch[:, :-1, :], dim=1) # *, 1
-        cond_sd = 1 / torch.abs(inv_chol_col[:, -1:, 0]) # *, 1
-        return cond_mean, cond_sd
 
     
 class LSTM_NNTG(torch.nn.Module):
@@ -186,11 +179,11 @@ class GPVecchia(torch.nn.Module):
         cond_mean_tmp = L_zero_diag @ x
         
         if isinstance(length, int) or length is None:
-            cond_sd = L[:, -1, -1]
-            cond_mean = cond_mean_tmp[:, -1, 0]
+            cond_sd = L[:, -1, -1].unsqueeze(-1)
+            cond_mean = cond_mean_tmp[:, -1, 0].unsqueeze(-1)
         else:
-            cond_sd = L[torch.arange(N), length - 1, length - 1]
-            cond_mean = cond_mean_tmp[torch.arange(N), length - 1, 0]
+            cond_sd = L[torch.arange(N), length - 1, length - 1].unsqueeze(-1)
+            cond_mean = cond_mean_tmp[torch.arange(N), length - 1, 0].unsqueeze(-1)
         
         return cond_mean, cond_sd
 

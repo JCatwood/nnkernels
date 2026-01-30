@@ -1,7 +1,7 @@
 import torch
-import gpytorch
 import sys
 import time
+import json
 
 from dataloader import Vecc_Dataloader_GP_sim
 from models import NNDT2_Sum_NNTG, MyMaternKernel, MyNSKernel_Scale, MyNSKernel_Lengthscale
@@ -11,11 +11,10 @@ torch.manual_seed(1)
 # %% tuning parameters
 d = 2 # locs are sampled from R^d
 target = 'inv_chol'
-fixed_len = True
-input_trans_type = 'locs_diff'
+fixed_len = True # need to be true
+input_trans_type = 'dist_direction_lastloc'
 aggregate_mtd = 'sum'
 m = 30
-target == "inv_chol"
 nfeatures = input_transformed_dim(d, input_trans_type)
 kernel_gen_name = "MyMaternKernel" # ["MyMaternKernel", "MyNSKernel_Scale", "MyNSKernel_Lengthscale"]
 # %% model parameters
@@ -26,7 +25,7 @@ if torch.cuda.is_available():
     size_DT2 = [nfeatures, 128, 128, 128, 16] 
     size_TG = [size_DT1[-1] + size_DT2[-1], 128, 128, 128, 1]
     n_batch = 2048
-    n_epoch = 10001
+    n_epoch = 40001
 else:
     print("GPU is not available. Using CPU.")
     device = torch.device('cpu')
@@ -67,6 +66,8 @@ for epoch in range(n_epoch):
     with torch.no_grad():
         locs_batch, y_batch, y, length = dataloader.get_minibatch(size=n_batch)
         X_batch_trans = input_transform(locs_batch, None, length, input_trans_type)
+        X_batch_trans = X_batch_trans[:, :-1, :]
+        y = - y[:, :-1, :] / y[:, -1:, :]
         X_batch_trans, y = X_batch_trans.to(device), y.to(device)
     # predict the target
     optimizer.zero_grad()
@@ -84,8 +85,15 @@ for epoch in range(n_epoch):
         crt_lr = optimizer.param_groups[0]["lr"]
         print(f"Current LR: {crt_lr}", flush=True)
 
-if torch.cuda.is_available():
-    model_state_fn = f"NN2_{target}_{input_trans_type}_{kernel_gen_name}_gpusize_loss{loss.detach().item()}.pt"
-else:
-    model_state_fn = f"NN2_{target}_{input_trans_type}_{kernel_gen_name}_cpusize_loss{loss.detach().item()}.pt"
+model.eval()
+model.to('cpu')
+model_fn = f"NN2_krig_coeff_d{d}_{input_trans_type}_{kernel_gen_name}_loss{loss.detach().item():.4f}"
+model_state_fn = model_fn + ".pt"
+model_init_parm_fn = model_fn + ".json"
+with open(model_init_parm_fn, 'w') as json_file:
+    json.dump({
+        "size_DT1": size_DT1,
+        "size_DT2": size_DT2,
+        "size_TG": size_TG,
+    })
 torch.save(model.state_dict(), model_state_fn)
