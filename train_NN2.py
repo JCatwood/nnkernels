@@ -38,9 +38,9 @@ if len(sys.argv) > 2:
         else:
             data_seed = None
 else:
-    train_type = "simulation"  # ["simulation", "data"]
+    train_type = "data"  # ["simulation", "data"]
     kernel_gen_name = "MyNSKernel_Lengthscale"  # ["MyMaternKernel", "MyNSKernel_Scale", "MyNSKernel_Lengthscale"]
-    data_name = "GP_NS_scale_2000_1000"
+    data_name = "GP_d2_mean0_NS_range_2000_1000"
     data_seed = 0
 # %% model parameters
 if torch.cuda.is_available():

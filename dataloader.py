@@ -16,19 +16,21 @@ class Vecc_Dataloader_GP_sim(torch.nn.Module):
             self.target = target
         assert self.target in ['y', 'cond_mean', 'cond_sd', 'inv_chol'], "invalid target input"
     
-    def get_minibatch(self, ind=None, size:int = 1024, *args, **kwargs):
-        locs_batch = torch.rand(size, self.length_max, self.d)
+    def get_minibatch(self, ind=None, size:int = 1024, length_max = None, *args, **kwargs):
+        if length_max is None:
+            length_max = self.length_max
+        locs_batch = torch.rand(size, length_max, self.d)
         covmat = self.kernel(locs_batch)
         L = torch.linalg.cholesky(covmat)
-        x = torch.normal(0.0, 1.0, (size, self.length_max, 1))
+        x = torch.normal(0.0, 1.0, (size, length_max, 1))
         y_batch = L @ x
         if not self.fixed_length:
-            length = torch.randint(1, self.length_max, (size, ))
-            mask = torch.arange(self.length_max).reshape(1, -1) < length.reshape(-1, 1)
+            length = torch.randint(1, length_max, (size, ))
+            mask = torch.arange(length_max).reshape(1, -1) < length.reshape(-1, 1)
             locs_batch[~mask, :] = 0
             y_batch[~mask, :] = 0
         else:
-            length = torch.full((size,), self.length_max)
+            length = torch.full((size,), length_max)
         if self.target == 'y':
             target = y_batch[torch.arange(size), length - 1, 0].clone().unsqueeze(-1)
         elif self.target == 'cond_mean':

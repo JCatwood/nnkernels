@@ -41,8 +41,8 @@ if len(sys.argv) > 4:
             data_seed = None
 else:
     fixed_len = True
-    train_type = "simulation"  # ["simulation", "data"]
-    data_name = "GP_NS_scale_2000_1000"
+    train_type = "data"  # ["simulation", "data"]
+    data_name = "GP_d2_mean0_NS_range_2000_1000"
     data_seed = 0
     kernel_gen_name = "MyNSKernel_Lengthscale"  # ["MyMaternKernel", "MyNSKernel_Scale", "MyNSKernel_Lengthscale"]
     kernel_train_name = "MyMaternKernel"  # ["MyMaternKernel", "MyNSKernel_Scale", "MyNSKernel_Lengthscale"]
