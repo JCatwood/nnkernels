@@ -33,15 +33,10 @@ if len(sys.argv) > 2:
         ), "Invalid kernel_gen_name (third) arguments"
     else:
         data_name = sys.argv[2]
-        if len(sys.argv) > 3:
-            data_seed = int(sys.argv[3])
-        else:
-            data_seed = None
 else:
     train_type = "data"  # ["simulation", "data"]
     kernel_gen_name = "MyNSKernel_Lengthscale"  # ["MyMaternKernel", "MyNSKernel_Scale", "MyNSKernel_Lengthscale"]
-    data_name = "GP_d2_mean0_NS_range_2000_1000"
-    data_seed = 0
+    data_name = "GP_d2_rndlocs_mean0_Matern_2000_1000"
 # %% model parameters
 if torch.cuda.is_available():
     device = torch.device('cuda')
@@ -58,7 +53,7 @@ else:
     size_DT2 = [nfeatures, 64, 64, 8] 
     size_TG = [size_DT1[-1] + size_DT2[-1], 64, 64, 1]
     n_batch = 1024
-    n_epoch = 5001
+    n_epoch = 3001
 # %% dataloader
 if train_type == "simulation":
     # define covariance kernel used for generating data
@@ -73,12 +68,7 @@ if train_type == "simulation":
         KernelClass = MyNSKernel_Lengthscale
     dataloader = Vecc_Dataloader_GP_sim(KernelClass, kernel_parms_init, d, fixed_len, m + 1, "y")
 elif train_type == "data":
-    if data_seed is None:
-        dataloader = Vecc_Dataloader_Dataset(data_name, fixed_len, length_max=m + 1)
-    else:
-        dataloader = Vecc_Dataloader_Dataset(
-            data_name, fixed_len, length_max=m + 1, seed=data_seed
-        )
+    dataloader = Vecc_Dataloader_Dataset(data_name)
 else:
     raise Exception("Unexpected train_type")
 # %% initialize model
@@ -133,9 +123,7 @@ with torch.no_grad():
     if train_type == "simulation":
         X_batch, y_batch, y_true, length = dataloader.get_test_batch(size=n_batch)
     else:
-        X_batch, y_batch, y_true, length = dataloader.get_test_batch(
-            size=dataloader.n_test
-        )
+        X_batch, y_batch, y_true, length = dataloader.get_test_batch(seed=0)
     input = input_transform(X_batch, None, length, type=input_trans_type)
     input = input[:, :-1, :]
     y_batch = y_batch[:, :-1, :]
@@ -161,7 +149,6 @@ with torch.no_grad():
         output_dict = {
             "data_type": train_type,
             "data_name": data_name,
-            "seed": data_seed,
             "model": "NN2",
             "m": m,
             "size_DT1": size_DT1,

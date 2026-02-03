@@ -35,15 +35,10 @@ if len(sys.argv) > 4:
         ), "Invalid kernel_gen_name (fourth) arguments"
     else:
         data_name = sys.argv[4]
-        if len(sys.argv) > 5:
-            data_seed = int(sys.argv[5])
-        else:
-            data_seed = None
 else:
     fixed_len = True
     train_type = "data"  # ["simulation", "data"]
-    data_name = "GP_d2_mean0_NS_range_2000_1000"
-    data_seed = 0
+    data_name = "GP_d2_rndlocs_mean0_Matern_2000_1000"
     kernel_gen_name = "MyNSKernel_Lengthscale"  # ["MyMaternKernel", "MyNSKernel_Scale", "MyNSKernel_Lengthscale"]
     kernel_train_name = "MyMaternKernel"  # ["MyMaternKernel", "MyNSKernel_Scale", "MyNSKernel_Lengthscale"]
 
@@ -57,7 +52,7 @@ else:
     print("GPU is not available. Using CPU.")
     device = torch.device("cpu")
     n_batch = 1024
-    n_epoch = 4001
+    n_epoch = 3001
 # %% dataloader
 if train_type == "simulation":
     # define covariance kernel used for generating data
@@ -72,12 +67,7 @@ if train_type == "simulation":
         KernelClass = MyNSKernel_Lengthscale
     dataloader = Vecc_Dataloader_GP_sim(KernelClass, kernel_parms_init, d, fixed_len, m + 1, "y")
 elif train_type == "data":
-    if data_seed is None:
-        dataloader = Vecc_Dataloader_Dataset(data_name, fixed_len, length_max=m + 1)
-    else:
-        dataloader = Vecc_Dataloader_Dataset(
-            data_name, fixed_len, length_max=m + 1, seed=data_seed
-        )
+    dataloader = Vecc_Dataloader_Dataset(data_name)
 else:
     raise Exception("Unexpected train_type")
 # %% initialize model
@@ -138,9 +128,7 @@ with torch.no_grad():
     if train_type == "simulation":
         X_batch, y_batch, y_true, length = dataloader.get_test_batch(size=n_batch)
     else:
-        X_batch, y_batch, y_true, length = dataloader.get_test_batch(
-            size=dataloader.n_test
-        )
+        X_batch, y_batch, y_true, length = dataloader.get_test_batch(seed=0)
     y_pred, y_stderr = model(X_batch, y_batch, length=length)
     loss = loss_function(y_pred, y_true, y_stderr)
     print(">>>")
@@ -158,7 +146,6 @@ with torch.no_grad():
         output_dict = {
             "data_type": train_type,
             "data_name": data_name,
-            "seed": data_seed,
             "model": "GPVecchia",
             "m": m,
             "same_length": fixed_len,
