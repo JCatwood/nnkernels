@@ -1,56 +1,59 @@
 import torch
-import sys
 import time
+import sys
 import json
 
-from models import GPVecchia, MyMaternKernel, MyNSKernel_Scale, MyNSKernel_Lengthscale
+from models import (
+    NNDT_Sum_NNTG,
+    NNDT2_Sum_NNTG,
+    MyMaternKernel,
+    MyNSKernel_Scale,
+    MyNSKernel_Lengthscale,
+)
+from loss import NllLoss, MyMSELoss
 from dataloader import Vecc_Dataloader_GP_sim, Vecc_Dataloader_Dataset
-from loss import NllLoss
+from input_transform import input_transformed_dim, input_transform
 
 torch.manual_seed(1)
 # %% tuning parameters
 d = 2  # locs are sampled from R^d
 m = 30
-if len(sys.argv) > 4:
-    if sys.argv[1].lower().strip() in ("yes", "true", "t", "y", "1", "on"):
-        fixed_len = True
-    elif sys.argv[1].lower().strip() in ("no", "false", "f", "n", "0", "off"):
-        fixed_len = False
-    else:
-        raise ValueError(f"Invalid boolean value: '{sys.argv[1]}'")
-    kernel_train_name = sys.argv[2]
-    assert kernel_train_name in (
-        "MyMaternKernel",
-        "MyNSKernel_Scale",
-        "MyNSKernel_Lengthscale",
-    ), "Invalid kernel_train_name (second) arguments"
-    train_type = sys.argv[3]
-    assert train_type in ("data", "simulation"), "Invalid train_type (third) argument"
+input_trans_type = "dist_direction_lastloc"
+nfeatures = input_transformed_dim(d, input_trans_type)
+fixed_len = True # needs to be true for this experiment
+if len(sys.argv) > 2:
+    train_type = sys.argv[1]
+    assert train_type in ("data", "simulation"), "Invalid train_type (first) argument"
     if train_type == "simulation":
-        kernel_gen_name = sys.argv[4]
+        kernel_gen_name = sys.argv[2]
         assert kernel_gen_name in (
             "MyMaternKernel",
             "MyNSKernel_Scale",
             "MyNSKernel_Lengthscale",
-        ), "Invalid kernel_gen_name (fourth) arguments"
+        ), "Invalid kernel_gen_name (third) arguments"
     else:
-        data_name = sys.argv[4]
+        data_name = sys.argv[2]
 else:
-    fixed_len = True
     train_type = "data"  # ["simulation", "data"]
-    data_name = "GP_d2_rndlocs_mean0_NS_scale_2000_1000"
     kernel_gen_name = "MyNSKernel_Lengthscale"  # ["MyMaternKernel", "MyNSKernel_Scale", "MyNSKernel_Lengthscale"]
-    kernel_train_name = "MyMaternKernel"  # ["MyMaternKernel", "MyNSKernel_Scale", "MyNSKernel_Lengthscale"]
-
+    data_name = "GP_d2_rndlocs_mean0_NS_scale_2000_1000"
 # %% model parameters
 if torch.cuda.is_available():
-    device = torch.device("cuda")
+    device = torch.device('cuda')
     print(f"GPU is available. Using device: {torch.cuda.get_device_name(0)}")
+    size_DT1 = [nfeatures, 128, 128, 128, 16] 
+    size_DT2 = [nfeatures, 128, 128, 128, 16] 
+    size_TG_krig_coeff = [size_DT1[-1] + size_DT2[-1], 128, 128, 128, 1]
+    size_TG_cond_sd_inv = [size_DT1[-1], 128, 128, 128, 1]
     n_batch = 2048
-    n_epoch = 30001
+    n_epoch = 10001
 else:
     print("GPU is not available. Using CPU.")
-    device = torch.device("cpu")
+    device = torch.device('cpu')
+    size_DT1 = [nfeatures, 64, 64, 8] 
+    size_DT2 = [nfeatures, 64, 64, 8] 
+    size_TG_krig_coeff = [size_DT1[-1] + size_DT2[-1], 64, 64, 1]
+    size_TG_cond_sd_inv = [size_DT1[-1], 64, 64, 1]
     n_batch = 1024
     n_epoch = 3001
 # %% dataloader
@@ -71,18 +74,10 @@ elif train_type == "data":
 else:
     raise Exception("Unexpected train_type")
 # %% initialize model
-if kernel_train_name == "MyMaternKernel":
-    kernel_parms_init = [0.5, 0.1, 1.5, 0.01]
-    KernelClass = MyMaternKernel
-elif kernel_train_name == "MyNSKernel_Scale":
-    kernel_parms_init = [-0.5, -1.2, -1.44, 0.3, 1.5, 0.01]
-    KernelClass = MyNSKernel_Scale
-elif kernel_train_name == "MyNSKernel_Lengthscale":
-    kernel_parms_init = [-0.5, -1.2, -1.44, 2.0, 0.01]
-    KernelClass = MyNSKernel_Lengthscale
-model = GPVecchia(KernelClass, *kernel_parms_init)
-model.to(device)
-
+model_krig_coeff = NNDT2_Sum_NNTG(size_DT1, size_DT2, size_TG_krig_coeff)
+model_cond_sd_inv = NNDT_Sum_NNTG(size_DT1, size_TG_cond_sd_inv)
+model_krig_coeff.to(device)
+model_cond_sd_inv.to(device)
 # %% scheduler
 def lr_lambda(epoch):
     base_lr = 0.001
@@ -94,22 +89,26 @@ def lr_lambda(epoch):
 # %% loss func
 loss_function = NllLoss()
 # %% model training
-optimizer = torch.optim.Adam(model.parameters(), lr=1)
+optimizer = torch.optim.Adam(
+    list(model_krig_coeff.parameters()) + list(model_cond_sd_inv.parameters()), lr=1
+)
 scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda)
-model.train()
+model_krig_coeff.train()
+model_cond_sd_inv.train()
 timer = time.perf_counter()
 for epoch in range(n_epoch):
     with torch.no_grad():
         X_batch, y_batch, y_true, length = dataloader.get_minibatch(size=n_batch)
-        X_batch, y_batch, y_true = (
-            X_batch.to(device),
-            y_batch.to(device),
-            y_true.to(device),
-        )
-    # predict the target
+        input = input_transform(X_batch, None, length, type=input_trans_type)
+        input = input[:, :-1, :]
+        y_batch = y_batch[:, :-1, :]
+        input, y_batch, y_true = input.to(device), y_batch.to(device), y_true.to(device)
+    # predict mean and stderr
     optimizer.zero_grad()
-    y_pred, y_stderr = model(X_batch, y_batch, length=length)
-    loss = loss_function(y_pred, y_true, y_stderr)
+    krig_coeff = model_krig_coeff(input)
+    y_pred = torch.sum(krig_coeff * y_batch, dim=1)
+    y_stderr_inv = model_cond_sd_inv(input)
+    loss = loss_function(y_pred, y_true, stderr_inv=y_stderr_inv)
     loss.backward()
     optimizer.step()
     scheduler.step()
@@ -121,35 +120,50 @@ for epoch in range(n_epoch):
         print(f"Current LR: {crt_lr}", flush=True)
         print(f"Loss after {epoch} iterations is {loss.detach().item()}", flush=True)
 # %% evaluate
-model.to("cpu")
-model.eval()
+model_krig_coeff.to("cpu")
+model_cond_sd_inv.to("cpu")
 loss_MSE = torch.nn.MSELoss()
 with torch.no_grad():
     if train_type == "simulation":
         X_batch, y_batch, y_true, length = dataloader.get_test_batch(size=n_batch)
     else:
         X_batch, y_batch, y_true, length = dataloader.get_test_batch(seed=0)
-    y_pred, y_stderr = model(X_batch, y_batch, length=length)
-    loss = loss_function(y_pred, y_true, y_stderr)
+    input = input_transform(X_batch, None, length, type=input_trans_type)
+    input = input[:, :-1, :]
+    y_batch = y_batch[:, :-1, :]
+    krig_coeff = model_krig_coeff(input)
+    y_pred = torch.sum(krig_coeff * y_batch, dim=1)
+    y_stderr_inv = model_cond_sd_inv(input)
+    loss = loss_function(y_pred, y_true, stderr_inv=y_stderr_inv)
     print(">>>")
     if train_type == "simulation":
         output_dict = {
             "data_type": train_type,
             "kernel_sim": kernel_gen_name,
-            "model": "GPVecchia",
+            "model": "NN2",
             "m": m,
+            "size_DT1": size_DT1,
+            "size_DT2": size_DT2,
+            "size_TG_krig_coeff": size_TG_krig_coeff,
+            "size_TG_cond_sd_inv": size_TG_cond_sd_inv,
+            "transformation": input_trans_type,
             "same_length": fixed_len,
-            "NLL": loss.detach().item(),
+            "Loss": loss.detach().item(),
             "MSE": loss_MSE(y_pred, y_true).item(),
         }
     else:
         output_dict = {
             "data_type": train_type,
             "data_name": data_name,
-            "model": "GPVecchia",
+            "model": "NN2",
             "m": m,
+            "size_DT1": size_DT1,
+            "size_DT2": size_DT2,
+            "size_TG_krig_coeff": size_TG_krig_coeff,
+            "size_TG_cond_sd_inv": size_TG_cond_sd_inv,
+            "transformation": input_trans_type,
             "same_length": fixed_len,
-            "NLL": loss.detach().item(),
+            "Loss": loss.detach().item(),
             "MSE": loss_MSE(y_pred, y_true).item(),
         }
     output_str = json.dumps(output_dict)
