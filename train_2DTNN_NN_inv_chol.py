@@ -111,7 +111,7 @@ for epoch in range(n_epoch):
     optimizer.zero_grad()
     krig_coeff = model_krig_coeff(input)
     y_pred = torch.sum(krig_coeff * y_batch, dim=1)
-    y_stderr_inv = model_cond_sd_inv(input)
+    y_stderr_inv = torch.exp(model_cond_sd_inv(input))
     loss = loss_function(y_pred, y_true, stderr_inv=y_stderr_inv)
     loss.backward()
     optimizer.step()
@@ -151,7 +151,7 @@ with torch.no_grad():
     y_batch = y_batch[:, :-1, :]
     krig_coeff = model_krig_coeff(input)
     y_pred = torch.sum(krig_coeff * y_batch, dim=1)
-    y_stderr_inv = model_cond_sd_inv(input)
+    y_stderr_inv = torch.exp(model_cond_sd_inv(input))
     loss_NLL_val = loss_NLL(y_pred, y_true, stderr_inv=y_stderr_inv)
     loss_MSE_val = loss_MSE(y_pred, y_true)
     print(">>>")
