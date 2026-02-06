@@ -101,7 +101,7 @@ timer = time.perf_counter()
 for epoch in range(n_epoch):
     with torch.no_grad():
         X_batch, y_batch, y_true, length = dataloader.get_minibatch(
-            size=n_batch, n_replicates=n_replicates_for_training
+            size=n_batch, m=m, n_replicates=n_replicates_for_training
             )
         input = input_transform(X_batch, None, length, type=input_trans_type)
         input = input[:, :-1, :]

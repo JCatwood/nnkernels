@@ -16,9 +16,11 @@ class Vecc_Dataloader_GP_sim(torch.nn.Module):
             self.target = target
         assert self.target in ['y', 'cond_mean', 'cond_sd', 'inv_chol'], "invalid target input"
     
-    def get_minibatch(self, ind=None, size:int = 1024, length_max = None, *args, **kwargs):
-        if length_max is None:
+    def get_minibatch(self, ind=None, size:int = 1024, m:int = 30, *args, **kwargs):
+        if m is None:
             length_max = self.length_max
+        else:
+            length_max = m + 1
         locs_batch = torch.rand(size, length_max, self.d)
         covmat = self.kernel(locs_batch)
         L = torch.linalg.cholesky(covmat)
