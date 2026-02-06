@@ -11,6 +11,8 @@ torch.manual_seed(1)
 # %% tuning parameters
 d = 2  # locs are sampled from R^d
 m = 30
+use_NN_for_testing = False
+n_replicates_for_training = 'all'  # can be 'all' or a positive integer specifying the number of replicates to use for training
 if len(sys.argv) > 4:
     if sys.argv[1].lower().strip() in ("yes", "true", "t", "y", "1", "on"):
         fixed_len = True
@@ -100,7 +102,7 @@ model.train()
 timer = time.perf_counter()
 for epoch in range(n_epoch):
     with torch.no_grad():
-        X_batch, y_batch, y_true, length = dataloader.get_minibatch(size=n_batch)
+        X_batch, y_batch, y_true, length = dataloader.get_minibatch(size=n_batch, n_replicates=n_replicates_for_training)
         X_batch, y_batch, y_true = (
             X_batch.to(device),
             y_batch.to(device),
@@ -124,13 +126,28 @@ for epoch in range(n_epoch):
 model.to("cpu")
 model.eval()
 loss_MSE = torch.nn.MSELoss()
+loss_NLL = NllLoss()
 with torch.no_grad():
     if train_type == "simulation":
         X_batch, y_batch, y_true, length = dataloader.get_test_batch(size=n_batch)
     else:
-        X_batch, y_batch, y_true, length = dataloader.get_test_batch(seed=0)
+        X_batch_list = []
+        y_batch_list = []
+        y_true_list = []
+        length_list = []
+        for seed in range(dataloader.N):
+            X_batch, y_batch, y_true, length = dataloader.get_test_batch(seed=seed, use_NN=use_NN_for_testing)
+            X_batch_list.append(X_batch)
+            y_batch_list.append(y_batch)
+            y_true_list.append(y_true)
+            length_list.append(length)
+        X_batch = torch.cat(X_batch_list, dim=0)
+        y_batch = torch.cat(y_batch_list, dim=0)
+        y_true = torch.cat(y_true_list, dim=0)
+        length = torch.cat(length_list, dim=0)
     y_pred, y_stderr = model(X_batch, y_batch, length=length)
-    loss = loss_function(y_pred, y_true, y_stderr)
+    loss_NLL_val = loss_NLL(y_pred, y_true, y_stderr)
+    loss_MSE_val = loss_MSE(y_pred, y_true)
     print(">>>")
     if train_type == "simulation":
         output_dict = {
@@ -139,8 +156,8 @@ with torch.no_grad():
             "model": "GPVecchia",
             "m": m,
             "same_length": fixed_len,
-            "NLL": loss.detach().item(),
-            "MSE": loss_MSE(y_pred, y_true).item(),
+            "NLL": loss_NLL_val.item(),
+            "MSE": loss_MSE_val.item(),
         }
     else:
         output_dict = {
@@ -149,8 +166,8 @@ with torch.no_grad():
             "model": "GPVecchia",
             "m": m,
             "same_length": fixed_len,
-            "NLL": loss.detach().item(),
-            "MSE": loss_MSE(y_pred, y_true).item(),
+            "NLL": loss_NLL_val.item(),
+            "MSE": loss_MSE_val.item(),
         }
     output_str = json.dumps(output_dict)
     print(output_str)

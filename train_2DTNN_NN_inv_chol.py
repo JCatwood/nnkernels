@@ -21,6 +21,8 @@ m = 30
 input_trans_type = "dist_direction_lastloc"
 nfeatures = input_transformed_dim(d, input_trans_type)
 fixed_len = True # needs to be true for this experiment
+use_NN_for_testing = False
+n_replicates_for_training = 'all'  # can be 'all' or a positive integer specifying the number of replicates to use for training
 if len(sys.argv) > 2:
     train_type = sys.argv[1]
     assert train_type in ("data", "simulation"), "Invalid train_type (first) argument"
@@ -98,7 +100,9 @@ model_cond_sd_inv.train()
 timer = time.perf_counter()
 for epoch in range(n_epoch):
     with torch.no_grad():
-        X_batch, y_batch, y_true, length = dataloader.get_minibatch(size=n_batch)
+        X_batch, y_batch, y_true, length = dataloader.get_minibatch(
+            size=n_batch, n_replicates=n_replicates_for_training
+            )
         input = input_transform(X_batch, None, length, type=input_trans_type)
         input = input[:, :-1, :]
         y_batch = y_batch[:, :-1, :]
@@ -123,18 +127,33 @@ for epoch in range(n_epoch):
 model_krig_coeff.to("cpu")
 model_cond_sd_inv.to("cpu")
 loss_MSE = torch.nn.MSELoss()
+loss_NLL = NllLoss()
 with torch.no_grad():
     if train_type == "simulation":
         X_batch, y_batch, y_true, length = dataloader.get_test_batch(size=n_batch)
     else:
-        X_batch, y_batch, y_true, length = dataloader.get_test_batch(seed=0)
+        X_batch_list = []
+        y_batch_list = []
+        y_true_list = []
+        length_list = []
+        for seed in range(dataloader.N):
+            X_batch, y_batch, y_true, length = dataloader.get_test_batch(seed=seed, use_NN=use_NN_for_testing)
+            X_batch_list.append(X_batch)
+            y_batch_list.append(y_batch)
+            y_true_list.append(y_true)
+            length_list.append(length)
+        X_batch = torch.cat(X_batch_list, dim=0)
+        y_batch = torch.cat(y_batch_list, dim=0)
+        y_true = torch.cat(y_true_list, dim=0)
+        length = torch.cat(length_list, dim=0)
     input = input_transform(X_batch, None, length, type=input_trans_type)
     input = input[:, :-1, :]
     y_batch = y_batch[:, :-1, :]
     krig_coeff = model_krig_coeff(input)
     y_pred = torch.sum(krig_coeff * y_batch, dim=1)
     y_stderr_inv = model_cond_sd_inv(input)
-    loss = loss_function(y_pred, y_true, stderr_inv=y_stderr_inv)
+    loss_NLL_val = loss_NLL(y_pred, y_true, stderr_inv=y_stderr_inv)
+    loss_MSE_val = loss_MSE(y_pred, y_true)
     print(">>>")
     if train_type == "simulation":
         output_dict = {
@@ -148,8 +167,8 @@ with torch.no_grad():
             "size_TG_cond_sd_inv": size_TG_cond_sd_inv,
             "transformation": input_trans_type,
             "same_length": fixed_len,
-            "Loss": loss.detach().item(),
-            "MSE": loss_MSE(y_pred, y_true).item(),
+            "NLL": loss_NLL_val.item(),
+            "MSE": loss_MSE_val.item(),
         }
     else:
         output_dict = {
@@ -163,8 +182,8 @@ with torch.no_grad():
             "size_TG_cond_sd_inv": size_TG_cond_sd_inv,
             "transformation": input_trans_type,
             "same_length": fixed_len,
-            "Loss": loss.detach().item(),
-            "MSE": loss_MSE(y_pred, y_true).item(),
+            "NLL": loss_NLL_val.item(),
+            "MSE": loss_MSE_val.item(),
         }
     output_str = json.dumps(output_dict)
     print(output_str)

@@ -158,10 +158,15 @@ class Vecc_Dataloader_Dataset:
     #     self.NN_test_rev = NN_test[:, torch.arange(self.default_len - 2, -1, -1)]
     #     assert torch.all(self.NN_train_rev[:, -1] == torch.arange(self.n_train))
 
-    def get_minibatch(self, ind=None, size:int = 1024, m = 30, *args, **kwargs):
+    def get_minibatch(self, ind=None, size:int = 1024, m = 30, n_replicates='all', *args, **kwargs):
+        if n_replicates == 'all':
+            n_replicates = self.N
+        else:
+            assert isinstance(n_replicates, int) and n_replicates > 0, "n_replicates should be a positive integer or 'all'"
+            assert n_replicates <= self.N, f"n_replicates should be less than or equal to {self.N}"
         rnd_tmp = torch.rand((size, self.n_train))
         ind = rnd_tmp.argsort(dim=-1)[:, :m+1]
-        seed_ind = torch.randint(0, self.N, (size, 1))
+        seed_ind = torch.randint(0, n_replicates, (size, 1))
         ind = ind + seed_ind * self.n_train
         X_batch = self.X_train[ind, :]
         y_batch = self.y_train[ind, :]
