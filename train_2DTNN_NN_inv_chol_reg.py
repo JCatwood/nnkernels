@@ -22,7 +22,9 @@ m = 30
 input_trans_type = "dist_direction_lastloc"
 nfeatures = input_transformed_dim(d, input_trans_type)
 fixed_len = True # needs to be true for this experiment
-use_NN_for_testing = False
+use_NN_for_testing = True
+use_NN_for_training = True # whether to use NN for training data selection. If False, random selection will be used. Note that using NN for training is only supported for datasets with fixed locations between replicates.
+cond_on_train = False
 n_replicates_for_training = 1  # can be 'all' or a positive integer specifying the number of replicates to use for training
 if len(sys.argv) > 2:
     train_type = sys.argv[1]
@@ -39,7 +41,7 @@ if len(sys.argv) > 2:
 else:
     train_type = "data"  # ["simulation", "data"]
     kernel_gen_name = "MyNSKernel_Lengthscale"  # ["MyMaternKernel", "MyNSKernel_Scale", "MyNSKernel_Lengthscale"]
-    data_name = "GP_d2_rndlocs_mean0_NS_scale_2000_1000"
+    data_name = f"GP_d{d}_fixedlocs_mean0_NS_range_16_4"
 # %% model parameters
 if torch.cuda.is_available():
     device = torch.device('cuda')
@@ -97,7 +99,7 @@ timer = time.perf_counter()
 for epoch in range(n_epoch_GP):
     with torch.no_grad():
         X_batch, y_batch, y_true, length = dataloader.get_minibatch(
-            size=n_batch, m=m, n_replicates=n_replicates_for_training
+            size=n_batch, m=m, n_replicates=n_replicates_for_training, use_NN=use_NN_for_training
             )
         X_batch, y_batch, y_true = (
             X_batch.to(device),
@@ -145,7 +147,8 @@ n_batch_data = n_batch - n_batch_sim
 for epoch in range(n_epoch):
     with torch.no_grad():
         X_batch_data, y_batch_data, y_true_data, length_data = dataloader.get_minibatch(
-            size=n_batch_data, m=m, n_replicates=n_replicates_for_training
+            size=n_batch_data, m=m, n_replicates=n_replicates_for_training, 
+            use_NN=use_NN_for_training
             )
         X_batch_sim, y_batch_sim, y_true_sim, length_sim = dataloader_GP_reg.get_minibatch(
             size=n_batch_sim, m=m
@@ -188,9 +191,9 @@ with torch.no_grad():
         y_batch_list = []
         y_true_list = []
         length_list = []
-        for seed in range(dataloader.N):
+        for seed in range(dataloader.N_test):
             X_batch, y_batch, y_true, length = dataloader.get_test_batch(
-                seed=seed, m=m, use_NN=use_NN_for_testing
+                seed=seed, m=m, use_NN=use_NN_for_testing, cond_on_train=cond_on_train
                 )
             X_batch_list.append(X_batch)
             y_batch_list.append(y_batch)

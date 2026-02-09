@@ -18,11 +18,13 @@ torch.manual_seed(1)
 # %% tuning parameters
 d = 2  # locs are sampled from R^d
 m = 30
-input_trans_type = "dist_direction_lastloc"
+input_trans_type = "locs_lastloc"
 nfeatures = input_transformed_dim(d, input_trans_type)
 fixed_len = True # needs to be true for this experiment
-use_NN_for_testing = False
+use_NN_for_testing = True
+use_NN_for_training = True # whether to use NN for training data selection. If False, random selection will be used. Note that using NN for training is only supported for datasets with fixed locations between replicates.
 n_replicates_for_training = 'all'  # can be 'all' or a positive integer specifying the number of replicates to use for training
+cond_on_train = False # whether to condition on training data when evaluating test batch. If False, the model will not have access to the training data locations and values when making predictions for the test batch. Note that cond_on_train=False is only supported when use_NN_for_testing=True
 if len(sys.argv) > 2:
     train_type = sys.argv[1]
     assert train_type in ("data", "simulation"), "Invalid train_type (first) argument"
@@ -38,7 +40,7 @@ if len(sys.argv) > 2:
 else:
     train_type = "data"  # ["simulation", "data"]
     kernel_gen_name = "MyNSKernel_Lengthscale"  # ["MyMaternKernel", "MyNSKernel_Scale", "MyNSKernel_Lengthscale"]
-    data_name = "GP_d2_rndlocs_mean0_NS_scale_2000_1000"
+    data_name = f"GP_d{d}_fixedlocs_mean0_NS_range_16_4"
 # %% model parameters
 if torch.cuda.is_available():
     device = torch.device('cuda')
@@ -101,7 +103,7 @@ timer = time.perf_counter()
 for epoch in range(n_epoch):
     with torch.no_grad():
         X_batch, y_batch, y_true, length = dataloader.get_minibatch(
-            size=n_batch, m=m, n_replicates=n_replicates_for_training
+            size=n_batch, m=m, n_replicates=n_replicates_for_training, use_NN=use_NN_for_training
             )
         input = input_transform(X_batch, None, length, type=input_trans_type)
         input = input[:, :-1, :]
@@ -130,14 +132,18 @@ loss_MSE = torch.nn.MSELoss()
 loss_NLL = NllLoss()
 with torch.no_grad():
     if train_type == "simulation":
-        X_batch, y_batch, y_true, length = dataloader.get_test_batch(size=n_batch)
+        X_batch, y_batch, y_true, length = dataloader.get_test_batch(
+            size=n_batch, m=m
+            )
     else:
         X_batch_list = []
         y_batch_list = []
         y_true_list = []
         length_list = []
-        for seed in range(dataloader.N):
-            X_batch, y_batch, y_true, length = dataloader.get_test_batch(seed=seed, use_NN=use_NN_for_testing)
+        for seed in range(dataloader.N_test):
+            X_batch, y_batch, y_true, length = dataloader.get_test_batch(
+                seed=seed, m=m, use_NN=use_NN_for_testing, cond_on_train=cond_on_train
+                )
             X_batch_list.append(X_batch)
             y_batch_list.append(y_batch)
             y_true_list.append(y_true)
@@ -188,3 +194,5 @@ with torch.no_grad():
     output_str = json.dumps(output_dict)
     print(output_str)
     print("<<<")
+
+# %%

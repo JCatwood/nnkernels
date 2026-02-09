@@ -2,6 +2,7 @@ import torch
 import pandas
 import os
 from models import MyMaternKernel, MyNSKernel_Scale, MyNSKernel_Lengthscale
+from scipy.stats.qmc import LatinHypercube
 
 class ZeroMean(torch.nn.Module):
     def __init__(self, *args, **kwargs):
@@ -33,11 +34,12 @@ def file_name(n_train, n_test, d=2, mean_name="meanname", kernel_name="kernelnam
 
 
 def sim_GP_data(mean_obj, kernel, n_train, n_test, d=2, mean_name="meanname", 
-                kernel_name="kernelname", seed=0, locs=None, mode='w'):
+                kernel_name="kernelname", seed=0, locs=None, mode='w', fn=None):
     """
     Simulate spatial GP data where locs are randomly sampled from the unit hypercube in R^d
     """
-    fn = file_name(n_train, n_test, d, mean_name, kernel_name, locs)
+    if fn is None:
+        fn = file_name(n_train, n_test, d, mean_name, kernel_name, locs)
     n = n_train + n_test
     os.makedirs(fn + "train/", exist_ok=True)
     os.makedirs(fn + "test/", exist_ok=True)
@@ -82,6 +84,29 @@ if __name__ == "__main__":
             sim_GP_data(mean_obj_mean0, kernel, n_train, n_test, d=d,
                         mean_name="mean0", kernel_name=name, seed=seed, mode='a')
         fn = file_name(n_train, n_test, d, "mean0", name, locs=None)
+        df_offset_train = pandas.DataFrame(offset_train)
+        df_offset_test = pandas.DataFrame(offset_test)
+        df_offset_train.to_csv(fn + "train_offset.csv", index=False, header=False)
+        df_offset_test.to_csv(fn + "test_offset.csv", index=False, header=False)
+    
+    kernel_and_name = zip([kernel_Matern, kernel_NS_scale, kernel_NS_lengthrange], 
+                          ["Matern", "NS_scale", "NS_range"])
+    seeds_train = range(16)
+    seeds_test = range(16, 20)
+    n = 2000
+    locs = torch.from_numpy(LatinHypercube(d).random(n)).float()
+    offset_train = torch.arange(len(seeds_train)) * n
+    offset_test = torch.arange(len(seeds_test)) * n
+    for kernel, name in kernel_and_name:
+        fn = file_name(len(seeds_train), len(seeds_test), d, "mean0", name, locs=locs)
+        for seed in seeds_train:
+            sim_GP_data(mean_obj_mean0, kernel, n_train=n, n_test=0, d=d,
+                        mean_name="mean0", kernel_name=name, seed=seed, mode='a',
+                        locs=locs, fn=fn)
+        for seed in seeds_test:
+            sim_GP_data(mean_obj_mean0, kernel, n_train=0, n_test=n, d=d,
+                        mean_name="mean0", kernel_name=name, seed=seed, mode='a',
+                        locs=locs, fn=fn)
         df_offset_train = pandas.DataFrame(offset_train)
         df_offset_test = pandas.DataFrame(offset_test)
         df_offset_train.to_csv(fn + "train_offset.csv", index=False, header=False)

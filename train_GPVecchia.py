@@ -11,7 +11,9 @@ torch.manual_seed(1)
 # %% tuning parameters
 d = 2  # locs are sampled from R^d
 m = 30
-use_NN_for_testing = False
+use_NN_for_testing = True
+use_NN_for_training = True # whether to use NN for training data selection. If False, random selection will be used. Note that using NN for training is only supported for datasets with fixed locations between replicates.
+cond_on_train = False
 n_replicates_for_training = 'all'  # can be 'all' or a positive integer specifying the number of replicates to use for training
 if len(sys.argv) > 4:
     if sys.argv[1].lower().strip() in ("yes", "true", "t", "y", "1", "on"):
@@ -40,7 +42,7 @@ if len(sys.argv) > 4:
 else:
     fixed_len = True
     train_type = "data"  # ["simulation", "data"]
-    data_name = "GP_d2_rndlocs_mean0_NS_scale_2000_1000"
+    data_name = f"GP_d{d}_fixedlocs_mean0_NS_range_16_4"
     kernel_gen_name = "MyNSKernel_Lengthscale"  # ["MyMaternKernel", "MyNSKernel_Scale", "MyNSKernel_Lengthscale"]
     kernel_train_name = "MyMaternKernel"  # ["MyMaternKernel", "MyNSKernel_Scale", "MyNSKernel_Lengthscale"]
 
@@ -103,7 +105,7 @@ timer = time.perf_counter()
 for epoch in range(n_epoch):
     with torch.no_grad():
         X_batch, y_batch, y_true, length = dataloader.get_minibatch(
-            size=n_batch, m=m, n_replicates=n_replicates_for_training
+            size=n_batch, m=m, n_replicates=n_replicates_for_training, use_NN=use_NN_for_training
     )
         X_batch, y_batch, y_true = (
             X_batch.to(device),
@@ -137,8 +139,10 @@ with torch.no_grad():
         y_batch_list = []
         y_true_list = []
         length_list = []
-        for seed in range(dataloader.N):
-            X_batch, y_batch, y_true, length = dataloader.get_test_batch(seed=seed, use_NN=use_NN_for_testing)
+        for seed in range(dataloader.N_test):
+            X_batch, y_batch, y_true, length = dataloader.get_test_batch(
+                seed=seed, use_NN=use_NN_for_testing, cond_on_train=cond_on_train
+                )
             X_batch_list.append(X_batch)
             y_batch_list.append(y_batch)
             y_true_list.append(y_true)
