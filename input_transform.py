@@ -1,7 +1,11 @@
 import torch
 
 def input_transformed_dim(d, type="locs_diff"):
-    if type == "locs_diff":
+    if type == "locs":
+        return d
+    elif type == "locs_and_y":
+        return d + 1
+    elif type == "locs_diff":
         return d
     elif type == "locs_diff_and_y":
         return d + 1
@@ -29,6 +33,12 @@ def input_transform(locs_batch, y_batch=None, length=None, type="locs_diff"):
     n_batch, length_max, d = locs_batch.shape
     if isinstance(length, int) or length is None:
             length = torch.full((n_batch,), length_max, dtype=torch.tensor(1).dtype)
+    if type == "locs":
+        return locs_batch
+    elif type == "locs_and_y":
+        y_batch_trans = y_batch.clone()
+        y_batch_trans[torch.arange(n_batch), length - 1, :] = 0
+        return torch.cat((locs_batch, y_batch_trans), dim=-1)
     if type == "locs_diff":
         locs_batch_trans = locs_batch - locs_batch[torch.arange(n_batch), length - 1, :].unsqueeze(1)
         return locs_batch_trans

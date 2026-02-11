@@ -91,9 +91,9 @@ if __name__ == "__main__":
     
     kernel_and_name = zip([kernel_Matern, kernel_NS_scale, kernel_NS_lengthrange], 
                           ["Matern", "NS_scale", "NS_range"])
-    seeds_train = range(16)
-    seeds_test = range(16, 20)
-    n = 2000
+    seeds_train = range(80)
+    seeds_test = range(80, 100)
+    n = 100
     locs = torch.from_numpy(LatinHypercube(d).random(n)).float()
     offset_train = torch.arange(len(seeds_train)) * n
     offset_test = torch.arange(len(seeds_test)) * n

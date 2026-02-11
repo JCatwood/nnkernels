@@ -3,36 +3,23 @@ import pandas
 from sklearn.neighbors import NearestNeighbors
 
 class Vecc_Dataloader_GP_sim(torch.nn.Module):
-    def __init__(self, KernelCls, kernel_parms, d=2, fixed_length=False, length_max=30, 
-                 target=('y', 'cond_mean', 'cond_sd', 'inv_chol')):
+    def __init__(self, KernelCls, kernel_parms, d=2, target=('y', 'cond_mean', 'cond_sd')):
         super().__init__()
         self.kernel = KernelCls(*kernel_parms)
         self.d = d
-        self.fixed_length = fixed_length
-        self.length_max = length_max
         if isinstance(target, tuple):
             self.target = target[0]
         else:
             self.target = target
-        assert self.target in ['y', 'cond_mean', 'cond_sd', 'inv_chol'], "invalid target input"
+        assert self.target in ['y', 'cond_mean', 'cond_sd'], "invalid target input"
     
     def get_minibatch(self, ind=None, size:int = 1024, m:int = 30, *args, **kwargs):
-        if m is None:
-            length_max = self.length_max
-        else:
-            length_max = m + 1
-        locs_batch = torch.rand(size, length_max, self.d)
+        locs_batch = torch.rand(size, m+1, self.d)
         covmat = self.kernel(locs_batch)
         L = torch.linalg.cholesky(covmat)
-        x = torch.normal(0.0, 1.0, (size, length_max, 1))
+        x = torch.normal(0.0, 1.0, (size, m+1, 1))
         y_batch = L @ x
-        if not self.fixed_length:
-            length = torch.randint(1, length_max, (size, ))
-            mask = torch.arange(length_max).reshape(1, -1) < length.reshape(-1, 1)
-            locs_batch[~mask, :] = 0
-            y_batch[~mask, :] = 0
-        else:
-            length = torch.full((size,), length_max)
+        length = torch.full((size,), m+1)
         if self.target == 'y':
             target = y_batch[torch.arange(size), length - 1, 0].clone().unsqueeze(-1)
         elif self.target == 'cond_mean':
@@ -40,11 +27,6 @@ class Vecc_Dataloader_GP_sim(torch.nn.Module):
                 L[torch.arange(size), length - 1, length - 1] * x[torch.arange(size), length - 1, 0]).unsqueeze(-1)
         elif self.target == 'cond_sd':
             target = L[torch.arange(size), length - 1, length - 1].unsqueeze(-1)
-        elif self.target == "inv_chol":
-            assert self.fixed_length == True, "does not support different lengths when the target is inv_chol"
-            covmat_inv = torch.cholesky_inverse(L, upper=False)
-            target = covmat_inv[:, :, -1:] / \
-                (covmat_inv[:, -1:, -1:] ** 0.5)
         else:
             raise Exception("Unexpected self.target")
         y_batch[torch.arange(size), length - 1, :] = 0
@@ -155,7 +137,7 @@ class Vecc_Dataloader_Dataset:
         self.NN_train_rev = NN_train[:, torch.arange(m, -1, -1)]
         assert torch.all(self.NN_train_rev[:, -1] == torch.arange(self.n_train))
 
-    def get_minibatch(self, size:int = 1024, m = 30, n_replicates='all', 
+    def get_minibatch(self, ind=None, size:int = 1024, m = 30, n_replicates='all', 
                       use_NN=False, *args, **kwargs):
         if n_replicates == 'all':
             n_replicates = self.N_train
@@ -165,17 +147,24 @@ class Vecc_Dataloader_Dataset:
         if use_NN:
             if not self.fixedlocs:
                 raise ValueError("use NN for training is not supported for datasets with different locations between replicates")
+            if ind is None:
+                ind = torch.argsort(torch.rand(n_replicates * self.n_train))[:size]
+            else:
+                size = len(ind)
+            ind_target_loc = ind % self.n_train
+            ind_replicate = ind // self.n_train
             if self.NN_train_rev is None or self.NN_train_rev.size(1) < m + 1:
                     self.update_NN_scale(m=m)
-            ind_target_loc = torch.randint(0, self.n_train, (size,))
-            ind = self.NN_train_rev[ind_target_loc, -(m + 1):]
+            ind_NN = self.NN_train_rev[ind_target_loc, -(m + 1):] + \
+                ind_replicate.unsqueeze(-1) * self.n_train
         else:
+            if ind is not None:
+                Warning("ind is ignored when use_NN is False")
             rnd_tmp = torch.rand((size, self.n_train))
-            ind = rnd_tmp.argsort(dim=-1)[:, :m+1]
-        seed_ind = torch.randint(0, n_replicates, (size, 1))
-        ind = ind + seed_ind * self.n_train
-        X_batch = self.X_train[ind, :]
-        y_batch = self.y_train[ind, :]
+            ind_replicate = torch.randint(0, n_replicates, (size, 1))
+            ind_NN = rnd_tmp.argsort(dim=-1)[:, :m+1] + ind_replicate * self.n_train
+        X_batch = self.X_train[ind_NN, :]
+        y_batch = self.y_train[ind_NN, :]
         length = torch.full((size,), m + 1)
         target = y_batch[torch.arange(size), length - 1, 0].clone().unsqueeze(-1)
         y_batch[torch.arange(size), length - 1, 0] = 0.0

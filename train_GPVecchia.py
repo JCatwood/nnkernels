@@ -15,35 +15,28 @@ use_NN_for_testing = True
 use_NN_for_training = True # whether to use NN for training data selection. If False, random selection will be used. Note that using NN for training is only supported for datasets with fixed locations between replicates.
 cond_on_train = False
 n_replicates_for_training = 'all'  # can be 'all' or a positive integer specifying the number of replicates to use for training
-if len(sys.argv) > 4:
-    if sys.argv[1].lower().strip() in ("yes", "true", "t", "y", "1", "on"):
-        fixed_len = True
-    elif sys.argv[1].lower().strip() in ("no", "false", "f", "n", "0", "off"):
-        fixed_len = False
-    else:
-        raise ValueError(f"Invalid boolean value: '{sys.argv[1]}'")
-    kernel_train_name = sys.argv[2]
+if len(sys.argv) > 3:
+    kernel_train_name = sys.argv[1]
     assert kernel_train_name in (
         "MyMaternKernel",
         "MyNSKernel_Scale",
         "MyNSKernel_Lengthscale",
     ), "Invalid kernel_train_name (second) arguments"
-    train_type = sys.argv[3]
+    train_type = sys.argv[2]
     assert train_type in ("data", "simulation"), "Invalid train_type (third) argument"
     if train_type == "simulation":
-        kernel_gen_name = sys.argv[4]
+        kernel_gen_name = sys.argv[3]
         assert kernel_gen_name in (
             "MyMaternKernel",
             "MyNSKernel_Scale",
             "MyNSKernel_Lengthscale",
         ), "Invalid kernel_gen_name (fourth) arguments"
     else:
-        data_name = sys.argv[4]
+        data_name = sys.argv[3]
 else:
-    fixed_len = True
     train_type = "data"  # ["simulation", "data"]
-    data_name = f"GP_d{d}_fixedlocs_mean0_NS_range_16_4"
-    kernel_gen_name = "MyNSKernel_Lengthscale"  # ["MyMaternKernel", "MyNSKernel_Scale", "MyNSKernel_Lengthscale"]
+    data_name = f"GP_d{d}_fixedlocs_mean0_NS_range_80_20"
+    kernel_gen_name = "MyNSKernel_Scale"  # ["MyMaternKernel", "MyNSKernel_Scale", "MyNSKernel_Lengthscale"]
     kernel_train_name = "MyMaternKernel"  # ["MyMaternKernel", "MyNSKernel_Scale", "MyNSKernel_Lengthscale"]
 
 # %% model parameters
@@ -69,7 +62,7 @@ if train_type == "simulation":
     elif kernel_gen_name == "MyNSKernel_Lengthscale":
         kernel_parms_init = [-0.5, -1.2, -1.44, 2.0, 0.01]
         KernelClass = MyNSKernel_Lengthscale
-    dataloader = Vecc_Dataloader_GP_sim(KernelClass, kernel_parms_init, d, fixed_len, m + 1, "y")
+    dataloader = Vecc_Dataloader_GP_sim(KernelClass, kernel_parms_init, d, "y")
 elif train_type == "data":
     dataloader = Vecc_Dataloader_Dataset(data_name)
 else:
@@ -161,7 +154,6 @@ with torch.no_grad():
             "kernel_sim": kernel_gen_name,
             "model": "GPVecchia",
             "m": m,
-            "same_length": fixed_len,
             "NLL": loss_NLL_val.item(),
             "MSE": loss_MSE_val.item(),
         }
@@ -171,7 +163,6 @@ with torch.no_grad():
             "data_name": data_name,
             "model": "GPVecchia",
             "m": m,
-            "same_length": fixed_len,
             "NLL": loss_NLL_val.item(),
             "MSE": loss_MSE_val.item(),
         }

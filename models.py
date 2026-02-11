@@ -10,7 +10,7 @@ class NNDT_Sum_NNTG(torch.nn.Module):
     otherwise
     the aggregated vector across n locs is concatenated with each of the transformed vector and pass through another NN as different batches. The output will be of shape [*, n, 1], with correspondence to the input
     """
-    def __init__(self, NNDT_size_seq, NNTG_size_seq, dropout=0.0, aggregate_mtd='sum'):
+    def __init__(self, NNDT_size_seq, NNTG_size_seq, dropout=0.0, concat_input=False):
         super().__init__()
         layers = []
         for i in range(len(NNDT_size_seq) - 1):
@@ -28,31 +28,20 @@ class NNDT_Sum_NNTG(torch.nn.Module):
                 layers.append(nn.ReLU())
         self.TG = nn.Sequential(*layers)
 
-        assert aggregate_mtd in ['sum', 'mean'], "aggregate_mtd must be one of ['sum', 'mean']"
-        self.aggregate_mtd = aggregate_mtd
+        self.concat_input = concat_input
+        if concat_input:
+            assert NNDT_size_seq[-1] + NNDT_size_seq[-1] == NNTG_size_seq[0], "size mismatch between DT output and TG input when concat_input is True"
 
     
-    def forward(self, X, length=None):
+    def forward(self, X, *args, **kwargs):
         X_after_DT = self.DT(X)
-        n_batch, length_max = X.size(0), X.size(1)
-        if isinstance(length, int) or length is None:
-            if self.aggregate_mtd == "sum":
-                X_after_sum = torch.sum(X_after_DT, dim = -2)
-            elif self.aggregate_mtd == "mean":
-                X_after_sum = torch.sum(X_after_DT, dim = -2) / \
-                    torch.tensor(length_max, dtype=X_after_DT.dtype)
+        if self.concat_input:
+            X_after_sum = torch.sum(X_after_DT, dim=-2, keepdim=True).expand(-1, X.size(-2), -1)
+            X_after_cat = torch.cat((X_after_sum, X_after_DT), dim=-1)
+            target = self.TG(X_after_cat)
         else:
-            assert len(length) == n_batch
-            mask_float = torch.zeros_like(X_after_DT)
-            n = X.size(1)
-            mask_bool = torch.arange(n).reshape(1, n) < length.reshape(-1, 1) # n_batch X n
-            mask_float[mask_bool, :] = 1.0
-            if self.aggregate_mtd == "sum":
-                X_after_sum = torch.sum(X_after_DT * mask_float, dim = -2)
-            elif self.aggregate_mtd == "mean":
-                length_float = length.to(X_after_DT.dtype).unsqueeze(-1)
-                X_after_sum = torch.sum(X_after_DT * mask_float, dim = -2) / length_float
-        target = self.TG(X_after_sum)
+            X_after_sum = torch.sum(X_after_DT, dim=-2)
+            target = self.TG(X_after_sum)
         return target
 
 class NNDT2_Sum_NNTG(torch.nn.Module):
