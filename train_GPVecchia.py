@@ -9,8 +9,8 @@ from loss import NllLoss
 
 torch.manual_seed(1)
 # %% tuning parameters
-d = 2  # locs are sampled from R^d
-m = 30
+d = 5  # locs are sampled from R^d
+m = 50
 use_NN_for_testing = True
 use_NN_for_training = True # whether to use NN for training data selection. If False, random selection will be used. Note that using NN for training is only supported for datasets with fixed locations between replicates.
 cond_on_train = False
@@ -34,9 +34,9 @@ if len(sys.argv) > 3:
     else:
         data_name = sys.argv[3]
 else:
-    train_type = "data"  # ["simulation", "data"]
+    train_type = "simulation"  # ["simulation", "data"]
     data_name = f"GP_d{d}_fixedlocs_mean0_NS_range_80_20"
-    kernel_gen_name = "MyNSKernel_Scale"  # ["MyMaternKernel", "MyNSKernel_Scale", "MyNSKernel_Lengthscale"]
+    kernel_gen_name = "MyNSKernel_Lengthscale"  # ["MyMaternKernel", "MyNSKernel_Scale", "MyNSKernel_Lengthscale"]
     kernel_train_name = "MyMaternKernel"  # ["MyMaternKernel", "MyNSKernel_Scale", "MyNSKernel_Lengthscale"]
 
 # %% model parameters
@@ -126,7 +126,7 @@ loss_MSE = torch.nn.MSELoss()
 loss_NLL = NllLoss()
 with torch.no_grad():
     if train_type == "simulation":
-        X_batch, y_batch, y_true, length = dataloader.get_test_batch(size=n_batch)
+        X_batch, y_batch, y_true, length = dataloader.get_test_batch(size=n_batch*10)
     else:
         X_batch_list = []
         y_batch_list = []
@@ -150,6 +150,7 @@ with torch.no_grad():
     print(">>>")
     if train_type == "simulation":
         output_dict = {
+            "d": d,
             "data_type": train_type,
             "kernel_sim": kernel_gen_name,
             "model": "GPVecchia",

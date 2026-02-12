@@ -10,15 +10,15 @@ from input_transform import input_transformed_dim, input_transform
 
 torch.manual_seed(1)
 # %% tuning parameters
-d = 2  # locs are sampled from R^d
-m = 30
+d = 5  # locs are sampled from R^d
+m = 50
 input_trans_type = "dist_direction_lastloc"
 nfeatures = input_transformed_dim(d, input_trans_type)
 use_NN_for_testing = False
 use_NN_for_training = False 
 n_replicates_for_training = 'all'  # can be 'all' or a positive integer 
 cond_on_train = True 
-loss_function = MyMSELoss()
+loss_function = NllLoss()
 if len(sys.argv) > 2:
     train_type = sys.argv[1]
     assert train_type in ("data", "simulation"), "Invalid train_type (first) argument"
@@ -32,7 +32,7 @@ if len(sys.argv) > 2:
     else:
         data_name = sys.argv[2]
 else:
-    train_type = "data"  # ["simulation", "data"]
+    train_type = "simulation"  # ["simulation", "data"]
     kernel_gen_name = "MyNSKernel_Lengthscale"  # ["MyMaternKernel", "MyNSKernel_Scale", "MyNSKernel_Lengthscale"]
     data_name = f"GP_d{d}_rndlocs_mean0_NS_range_2000_1000"
 # %% model parameters
@@ -121,7 +121,7 @@ loss_NLL = NllLoss()
 with torch.no_grad():
     if train_type == "simulation":
         X_batch, y_batch, y_true, length = dataloader.get_test_batch(
-            size=n_batch, m=m
+            size=n_batch*10, m=m
             )
     else:
         X_batch_list = []
@@ -151,6 +151,7 @@ with torch.no_grad():
     print(">>>")
     if train_type == "simulation":
         output_dict = {
+            "d": d,
             "data_type": train_type,
             "kernel_sim": kernel_gen_name,
             "model": "NN",
