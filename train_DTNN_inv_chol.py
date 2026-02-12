@@ -18,8 +18,7 @@ use_NN_for_testing = False
 use_NN_for_training = False 
 n_replicates_for_training = 'all'  # can be 'all' or a positive integer 
 cond_on_train = True 
-loss_function = NllLoss()
-if len(sys.argv) > 2:
+if len(sys.argv) > 3:
     train_type = sys.argv[1]
     assert train_type in ("data", "simulation"), "Invalid train_type (first) argument"
     if train_type == "simulation":
@@ -31,10 +30,19 @@ if len(sys.argv) > 2:
         ), "Invalid kernel_gen_name (third) arguments"
     else:
         data_name = sys.argv[2]
+    loss_name = sys.argv[3]
+    assert loss_name in ("NLL", "MSE"), "Invalid loss_name (3rd) argument"
+    
 else:
     train_type = "simulation"  # ["simulation", "data"]
     kernel_gen_name = "MyNSKernel_Lengthscale"  # ["MyMaternKernel", "MyNSKernel_Scale", "MyNSKernel_Lengthscale"]
     data_name = f"GP_d{d}_rndlocs_mean0_NS_range_2000_1000"
+    loss_name = "NLL"
+# %% loss function
+if loss_name == "NLL":
+    loss_function = NllLoss()
+else:
+    loss_function = MyMSELoss()
 # %% model parameters
 if torch.cuda.is_available():
     device = torch.device('cuda')
@@ -43,7 +51,7 @@ if torch.cuda.is_available():
     size_TG_krig_coeff = [size_DT[-1] * 2, 128, 128, 128, 1]
     size_TG_cond_sd_inv = [size_DT[-1], 128, 128, 128, 1]
     n_batch = 2048
-    n_epoch = 10001
+    n_epoch = 30001
 else:
     print("GPU is not available. Using CPU.")
     device = torch.device('cpu')
@@ -77,7 +85,7 @@ model_cond_sd_inv.to(device)
 # %% scheduler
 def lr_lambda(epoch):
     base_lr = 0.001
-    factor = 0.0001
+    factor = 0.0002
     return base_lr / (1 + factor * epoch)
     # return 0.001
 # %% model training
@@ -154,6 +162,7 @@ with torch.no_grad():
             "d": d,
             "data_type": train_type,
             "kernel_sim": kernel_gen_name,
+            "loss": loss_name,
             "model": "NN",
             "m": m,
             "size_DT": size_DT,
@@ -167,6 +176,7 @@ with torch.no_grad():
         output_dict = {
             "data_type": train_type,
             "data_name": data_name,
+            "loss": loss_name,
             "model": "NN",
             "m": m,
             "size_DT": size_DT,
