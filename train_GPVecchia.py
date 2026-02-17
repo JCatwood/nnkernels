@@ -16,27 +16,27 @@ use_NN_for_training = True # whether to use NN for training data selection. If F
 cond_on_train = False
 n_replicates_for_training = 'all'  # can be 'all' or a positive integer specifying the number of replicates to use for training
 if len(sys.argv) > 3:
-    kernel_train_name = sys.argv[1]
+    train_type = sys.argv[1]
+    assert train_type in ("data", "simulation"), "Invalid train_type (first) argument"
+    kernel_train_name = sys.argv[2]
     assert kernel_train_name in (
         "MyMaternKernel",
         "MyNSKernel_Scale",
         "MyNSKernel_Lengthscale",
     ), "Invalid kernel_train_name (second) arguments"
-    train_type = sys.argv[2]
-    assert train_type in ("data", "simulation"), "Invalid train_type (third) argument"
     if train_type == "simulation":
         kernel_gen_name = sys.argv[3]
         assert kernel_gen_name in (
             "MyMaternKernel",
             "MyNSKernel_Scale",
             "MyNSKernel_Lengthscale",
-        ), "Invalid kernel_gen_name (fourth) arguments"
+        ), "Invalid kernel_gen_name (third) arguments"
     else:
         data_name = sys.argv[3]
 else:
     train_type = "simulation"  # ["simulation", "data"]
     data_name = f"GP_d{d}_fixedlocs_mean0_NS_range_80_20"
-    kernel_gen_name = "MyNSKernel_Lengthscale"  # ["MyMaternKernel", "MyNSKernel_Scale", "MyNSKernel_Lengthscale"]
+    kernel_gen_name = "MyNSKernel_Scale"  # ["MyMaternKernel", "MyNSKernel_Scale", "MyNSKernel_Lengthscale"]
     kernel_train_name = "MyMaternKernel"  # ["MyMaternKernel", "MyNSKernel_Scale", "MyNSKernel_Lengthscale"]
 
 # %% model parameters
@@ -44,7 +44,7 @@ if torch.cuda.is_available():
     device = torch.device("cuda")
     print(f"GPU is available. Using device: {torch.cuda.get_device_name(0)}")
     n_batch = 2048
-    n_epoch = 30001
+    n_epoch = 10001
 else:
     print("GPU is not available. Using CPU.")
     device = torch.device("cpu")
@@ -126,7 +126,8 @@ loss_MSE = torch.nn.MSELoss()
 loss_NLL = NllLoss()
 with torch.no_grad():
     if train_type == "simulation":
-        X_batch, y_batch, y_true, length = dataloader.get_test_batch(size=n_batch*10)
+        torch.manual_seed(123)
+        X_batch, y_batch, y_true, length = dataloader.get_test_batch(size=n_batch*10, m=m)
     else:
         X_batch_list = []
         y_batch_list = []
@@ -154,6 +155,7 @@ with torch.no_grad():
             "data_type": train_type,
             "kernel_sim": kernel_gen_name,
             "model": "GPVecchia",
+            "kernel_train": kernel_train_name,
             "m": m,
             "NLL": loss_NLL_val.item(),
             "MSE": loss_MSE_val.item(),
@@ -163,6 +165,7 @@ with torch.no_grad():
             "data_type": train_type,
             "data_name": data_name,
             "model": "GPVecchia",
+            "kernel_train": kernel_train_name,
             "m": m,
             "NLL": loss_NLL_val.item(),
             "MSE": loss_MSE_val.item(),

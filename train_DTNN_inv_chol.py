@@ -128,9 +128,8 @@ loss_MSE = torch.nn.MSELoss()
 loss_NLL = NllLoss()
 with torch.no_grad():
     if train_type == "simulation":
-        X_batch, y_batch, y_true, length = dataloader.get_test_batch(
-            size=n_batch*10, m=m
-            )
+        torch.manual_seed(123)
+        X_batch, y_batch, y_true, length = dataloader.get_test_batch(size=n_batch*10, m=m)
     else:
         X_batch_list = []
         y_batch_list = []
