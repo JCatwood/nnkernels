@@ -9,8 +9,8 @@ from loss import NllLoss
 
 torch.manual_seed(1)
 # %% tuning parameters
-d = 5  # locs are sampled from R^d
-m = 50
+d = 2  # locs are sampled from R^d
+m = 30
 use_NN_for_testing = True
 use_NN_for_training = True # whether to use NN for training data selection. If False, random selection will be used. Note that using NN for training is only supported for datasets with fixed locations between replicates.
 cond_on_train = False
@@ -36,7 +36,7 @@ if len(sys.argv) > 3:
 else:
     train_type = "simulation"  # ["simulation", "data"]
     data_name = f"GP_d{d}_fixedlocs_mean0_NS_range_80_20"
-    kernel_gen_name = "MyNSKernel_Scale"  # ["MyMaternKernel", "MyNSKernel_Scale", "MyNSKernel_Lengthscale"]
+    kernel_gen_name = "MyMaternKernel"  # ["MyMaternKernel", "MyNSKernel_Scale", "MyNSKernel_Lengthscale"]
     kernel_train_name = "MyMaternKernel"  # ["MyMaternKernel", "MyNSKernel_Scale", "MyNSKernel_Lengthscale"]
 
 # %% model parameters
@@ -57,10 +57,10 @@ if train_type == "simulation":
         kernel_parms_init = [1.0, 0.3, 1.5, 0.01]
         KernelClass = MyMaternKernel
     elif kernel_gen_name == "MyNSKernel_Scale":
-        kernel_parms_init = [-0.5, -1.2, -1.44, 0.3, 1.5, 0.01]
+        kernel_parms_init = [1.6, 0.75, -0.75, 0.3, 0.5, 0.01]
         KernelClass = MyNSKernel_Scale
     elif kernel_gen_name == "MyNSKernel_Lengthscale":
-        kernel_parms_init = [-0.5, -1.2, -1.44, 2.0, 0.01]
+        kernel_parms_init = [1.6, 0.75, -0.75, 1.0, 0.01]
         KernelClass = MyNSKernel_Lengthscale
     dataloader = Vecc_Dataloader_GP_sim(KernelClass, kernel_parms_init, d, "y")
 elif train_type == "data":

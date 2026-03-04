@@ -107,8 +107,8 @@ class LSTM_NNTG(torch.nn.Module):
         return out, h_out, c_out
 
 class MyMaternKernel(gpytorch.kernels.MaternKernel):
-    def __init__(self, scale, lengthscale, nu, nugget):
-        super().__init__(nu)
+    def __init__(self, scale, lengthscale, nu, nugget, **kwargs):
+        super().__init__(nu, **kwargs)
         is_stationary = True
         self.raw_scale = torch.nn.Parameter(torch.log(torch.tensor(scale)))
         self.lengthscale = lengthscale
@@ -171,14 +171,15 @@ class GPVecchia(torch.nn.Module):
 class MyNSKernel_Scale(gpytorch.kernels.MaternKernel):
     """
     MyMaternKernel kernel with varying scale: 
-    scale = exp(beta0 + beta1 * sin(x * 2pi) + beta2 * cos(y * 2pi))
+    scale = beta0 + beta1 * sin(sum(x, dim=-1) * pi) + beta2 * cos(sum(x, dim=-1) * 2pi)
     """
-    def __init__(self, beta0, beta1, beta2, lengthscale, nu, nugget):
-        super().__init__(nu)
+    def __init__(self, beta0, beta1, beta2, lengthscale, nu, nugget, **kwargs):
+        super().__init__(nu, **kwargs)
         is_stationary = False
         self.beta0 = torch.nn.Parameter(torch.tensor(beta0))
         self.beta1 = torch.nn.Parameter(torch.tensor(beta1))
         self.beta2 = torch.nn.Parameter(torch.tensor(beta2))
+        assert self.beta0 - torch.abs(self.beta1) - torch.abs(self.beta2) > 0, "beta0 should be large enough to ensure the scale is positive"
         self.lengthscale = lengthscale
         self.raw_nugget = torch.nn.Parameter(torch.log(torch.tensor(nugget)))
     
@@ -189,10 +190,12 @@ class MyNSKernel_Scale(gpytorch.kernels.MaternKernel):
         else:
             x1_view = x1
             x2_view = x2
-        sigma_x1 = torch.exp(self.beta0 + self.beta1 * torch.sin(x1_view[:, :, 0] * torch.pi * 2) + 
-                             self.beta2 * torch.cos(x1_view[:, :, 1] * torch.pi * 2))
-        sigma_x2 = torch.exp(self.beta0 + self.beta1 * torch.sin(x2_view[:, :, 0] * torch.pi * 2) + 
-                             self.beta2 * torch.cos(x2_view[:, :, 1] * torch.pi * 2))
+        sigma_x1 = self.beta0 + \
+            self.beta1 * torch.sin(torch.sum(x1_view, dim=-1) * torch.pi) + \
+            self.beta2 * torch.cos(torch.sum(x1_view, dim=-1) * torch.pi * 2)
+        sigma_x2 = self.beta0 + \
+            self.beta1 * torch.sin(torch.sum(x2_view, dim=-1) * torch.pi) + \
+            self.beta2 * torch.cos(torch.sum(x2_view, dim=-1) * torch.pi * 2)
         covmat_parent = super().forward(x1_view, x2_view, **params)
         covmat_scaled = covmat_parent * sigma_x1.unsqueeze(-1) * sigma_x2.unsqueeze(1)
         n = covmat_scaled.shape[-1]
@@ -218,7 +221,7 @@ class MyNSKernel_Scale(gpytorch.kernels.MaternKernel):
 class MyNSKernel_Lengthscale(torch.nn.Module):
     """
     Exponential covariance kernel with varying lengthscale: 
-    lengthscale = exp(beta0 + beta1 * sin(x * 2pi) + beta2 * cos(y * 2pi))
+    lengthscale = beta0 + beta1 * sin(sum(x, dim=-1) * pi) + beta2 * cos(sum(x, dim=-1) * 2pi)
     Refer to Eq. 2-4 of https://arxiv.org/pdf/2208.07431
     """
     def __init__(self, beta0, beta1, beta2, scale, nugget):
@@ -227,6 +230,7 @@ class MyNSKernel_Lengthscale(torch.nn.Module):
         self.beta0 = torch.nn.Parameter(torch.tensor(beta0))
         self.beta1 = torch.nn.Parameter(torch.tensor(beta1))
         self.beta2 = torch.nn.Parameter(torch.tensor(beta2))
+        assert self.beta0 - torch.abs(self.beta1) - torch.abs(self.beta2) > 0, "beta0 should be large enough to ensure the lengthscale is positive"
         self.raw_scale = torch.nn.Parameter(torch.log(torch.tensor(scale)))
         self.raw_nugget = torch.nn.Parameter(torch.log(torch.tensor(nugget)))
     
@@ -236,8 +240,9 @@ class MyNSKernel_Lengthscale(torch.nn.Module):
         else:
             x_view = x
         d = x_view.size(-1)
-        lengthscale_x = torch.exp(self.beta0 + self.beta1 * torch.sin(x_view[:, :, 0] * torch.pi * 2) + 
-                            self.beta2 * torch.cos(x_view[:, :, 1] * torch.pi * 2))
+        lengthscale_x = self.beta0 + \
+            self.beta1 * torch.sin(torch.sum(x_view, dim=-1) * torch.pi) + \
+            self.beta2 * torch.cos(torch.sum(x_view, dim=-1) * torch.pi * 2)
         lengthscale_x1 = lengthscale_x.unsqueeze(-1)
         lengthscale_x2 = lengthscale_x.unsqueeze(1)
         c = ((lengthscale_x1 ** 0.25) * (lengthscale_x2 ** 0.25) / 

@@ -10,8 +10,8 @@ from input_transform import input_transformed_dim, input_transform
 
 torch.manual_seed(1)
 # %% tuning parameters
-d = 5  # locs are sampled from R^d
-m = 50
+d = 2  # locs are sampled from R^d
+m = 30
 input_trans_type = "dist_direction_lastloc"
 nfeatures = input_transformed_dim(d, input_trans_type)
 use_NN_for_testing = False
@@ -35,7 +35,7 @@ if len(sys.argv) > 3:
     
 else:
     train_type = "simulation"  # ["simulation", "data"]
-    kernel_gen_name = "MyNSKernel_Lengthscale"  # ["MyMaternKernel", "MyNSKernel_Scale", "MyNSKernel_Lengthscale"]
+    kernel_gen_name = "MyMaternKernel"  # ["MyMaternKernel", "MyNSKernel_Scale", "MyNSKernel_Lengthscale"]
     data_name = f"GP_d{d}_rndlocs_mean0_NS_range_2000_1000"
     loss_name = "NLL"
 # %% loss function
@@ -67,10 +67,10 @@ if train_type == "simulation":
         kernel_parms_init = [1.0, 0.3, 1.5, 0.01]
         KernelClass = MyMaternKernel
     elif kernel_gen_name == "MyNSKernel_Scale":
-        kernel_parms_init = [-0.5, -1.2, -1.44, 0.3, 1.5, 0.01]
+        kernel_parms_init = [1.6, 0.75, -0.75, 0.3, 0.5, 0.01]
         KernelClass = MyNSKernel_Scale
     elif kernel_gen_name == "MyNSKernel_Lengthscale":
-        kernel_parms_init = [-0.5, -1.2, -1.44, 2.0, 0.01]
+        kernel_parms_init = [1.6, 0.75, -0.75, 1.0, 0.01]
         KernelClass = MyNSKernel_Lengthscale
     dataloader = Vecc_Dataloader_GP_sim(KernelClass, kernel_parms_init, d, "y")
 elif train_type == "data":
