@@ -226,7 +226,7 @@ with torch.no_grad():
         output_dict = {
             "data_type": train_type,
             "kernel_sim": kernel_gen_name,
-            "model": "NN2",
+            "model": "NN_reg",
             "m": m,
             "size_phi": size_phi,
             "size_rho1": size_rho1,
@@ -242,7 +242,7 @@ with torch.no_grad():
         output_dict = {
             "data_type": train_type,
             "data_name": data_name,
-            "model": "NN2",
+            "model": "NN_reg",
             "m": m,
             "size_phi": size_phi,
             "size_rho1": size_rho1,
