@@ -3,7 +3,7 @@ import pandas
 from sklearn.neighbors import NearestNeighbors
 
 class Vecc_Dataloader_GP_sim(torch.nn.Module):
-    def __init__(self, KernelCls, kernel_parms, d=2, target=('y', 'cond_mean', 'cond_sd')):
+    def __init__(self, KernelCls, kernel_parms, d=2, target=('y', 'cond_mean', 'cond_sd', 'krig_coeff')):
         super().__init__()
         self.kernel = KernelCls(*kernel_parms)
         self.d = d
@@ -11,7 +11,7 @@ class Vecc_Dataloader_GP_sim(torch.nn.Module):
             self.target = target[0]
         else:
             self.target = target
-        assert self.target in ['y', 'cond_mean', 'cond_sd'], "invalid target input"
+        assert self.target in ['y', 'cond_mean', 'cond_sd', 'krig_coeff'], "invalid target input"
     
     def get_minibatch(self, ind=None, size:int = 1024, m:int = 30, *args, **kwargs):
         locs_batch = torch.rand(size, m+1, self.d)
@@ -27,6 +27,11 @@ class Vecc_Dataloader_GP_sim(torch.nn.Module):
                 L[torch.arange(size), length - 1, length - 1] * x[torch.arange(size), length - 1, 0]).unsqueeze(-1)
         elif self.target == 'cond_sd':
             target = L[torch.arange(size), length - 1, length - 1].unsqueeze(-1)
+        elif self.target == "krig_coeff":
+            covmat_inv = torch.cholesky_inverse(L, upper=False)
+            invchol_lastcol = covmat_inv[:, :, -1:] / \
+                (covmat_inv[:, -1:, -1:] ** 0.5) # [size, m+1, 1]
+            target = - invchol_lastcol[:, :-1, :] / invchol_lastcol[:, -1:, :] # [size, m, 1]
         else:
             raise Exception("Unexpected self.target")
         y_batch[torch.arange(size), length - 1, :] = 0
