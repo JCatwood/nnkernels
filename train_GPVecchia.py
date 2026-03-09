@@ -13,7 +13,7 @@ d = 2  # locs are sampled from R^d
 m = 30
 use_NN_for_testing = True
 use_NN_for_training = True # whether to use NN for training data selection. If False, random selection will be used. Note that using NN for training is only supported for datasets with fixed locations between replicates.
-cond_on_train = False
+cond_on_train = True
 n_replicates_for_training = 'all'  # can be 'all' or a positive integer specifying the number of replicates to use for training
 if len(sys.argv) > 3:
     train_type = sys.argv[1]
@@ -44,12 +44,12 @@ if torch.cuda.is_available():
     device = torch.device("cuda")
     print(f"GPU is available. Using device: {torch.cuda.get_device_name(0)}")
     n_batch = 2048
-    n_epoch = 10001
+    n_epoch = 30001
 else:
     print("GPU is not available. Using CPU.")
     device = torch.device("cpu")
     n_batch = 1024
-    n_epoch = 3001
+    n_epoch = 4001
 # %% dataloader
 if train_type == "simulation":
     # define covariance kernel used for generating data
