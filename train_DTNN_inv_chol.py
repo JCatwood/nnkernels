@@ -3,7 +3,7 @@ import time
 import sys
 import json
 
-from models import NNDT_Sum_NNTG, MyMaternKernel, MyNSKernel_Scale, MyNSKernel_Lengthscale
+from models import PermInvarClass, MyMaternKernel, MyNSKernel_Scale, MyNSKernel_Lengthscale, PermPreserveClass
 from loss import NllLoss, MyMSELoss
 from dataloader import Vecc_Dataloader_GP_sim, Vecc_Dataloader_Dataset
 from input_transform import input_transformed_dim, input_transform
@@ -12,7 +12,7 @@ torch.manual_seed(1)
 # %% tuning parameters
 d = 2  # locs are sampled from R^d
 m = 30
-input_trans_type = "dist_direction_lastloc"
+input_trans_type = "locs_lastloc"
 nfeatures = input_transformed_dim(d, input_trans_type)
 use_NN_for_testing = False
 use_NN_for_training = False 
@@ -47,17 +47,19 @@ else:
 if torch.cuda.is_available():
     device = torch.device('cuda')
     print(f"GPU is available. Using device: {torch.cuda.get_device_name(0)}")
-    size_DT = [nfeatures, 128, 128, 128, 64] 
-    size_TG_krig_coeff = [size_DT[-1] * 2, 128, 128, 128, 1]
-    size_TG_cond_sd_inv = [size_DT[-1], 128, 128, 128, 1]
+    size_phi = [nfeatures, 128, 128, 128, 128]
+    size_rho2 = [128, 128, 128, 128, 16]
+    size_rho1 = [nfeatures + 16, 128, 128, 128, 1]
+    size_rho = [128, 128, 128, 128, 1]
     n_batch = 2048
     n_epoch = 30001
 else:
     print("GPU is not available. Using CPU.")
     device = torch.device('cpu')
-    size_DT = [nfeatures, 64, 64, 16] 
-    size_TG_krig_coeff = [size_DT[-1] * 2, 64, 64, 1]
-    size_TG_cond_sd_inv = [size_DT[-1], 64, 64, 1]
+    size_phi = [nfeatures, 64, 64, 64, 64]
+    size_rho2 = [64, 64, 64, 64, 8]
+    size_rho1 = [nfeatures + 8, 64, 64, 64, 1]
+    size_rho = [64, 64, 64, 64, 1]
     n_batch = 1024
     n_epoch = 4001
 # %% dataloader
@@ -78,8 +80,8 @@ elif train_type == "data":
 else:
     raise Exception("Unexpected train_type")
 # %% initialize model
-model_krig_coeff = NNDT_Sum_NNTG(size_DT, size_TG_krig_coeff, concat_input=True)
-model_cond_sd_inv = NNDT_Sum_NNTG(size_DT, size_TG_cond_sd_inv, concat_input=False)
+model_krig_coeff = PermPreserveClass(size_phi, size_rho1, size_rho2)
+model_cond_sd_inv = PermInvarClass(size_phi, size_rho, concat_input=False)
 model_krig_coeff.to(device)
 model_cond_sd_inv.to(device)
 # %% scheduler
@@ -164,9 +166,10 @@ with torch.no_grad():
             "loss": loss_name,
             "model": "NN",
             "m": m,
-            "size_DT": size_DT,
-            "size_TG_krig_coeff": size_TG_krig_coeff,
-            "size_TG_cond_sd_inv": size_TG_cond_sd_inv,
+            "size_phi": size_phi,
+            "size_rho1": size_rho1,
+            "size_rho2": size_rho2,
+            "size_rho": size_rho,
             "transformation": input_trans_type,
             "NLL": loss_NLL_val.item(),
             "MSE": loss_MSE_val.item(),
@@ -178,9 +181,10 @@ with torch.no_grad():
             "loss": loss_name,
             "model": "NN",
             "m": m,
-            "size_DT": size_DT,
-            "size_TG_krig_coeff": size_TG_krig_coeff,
-            "size_TG_cond_sd_inv": size_TG_cond_sd_inv,
+            "size_phi": size_phi,
+            "size_rho1": size_rho1,
+            "size_rho2": size_rho2,
+            "size_rho": size_rho,
             "transformation": input_trans_type,
             "NLL": loss_NLL_val.item(),
             "MSE": loss_MSE_val.item(),

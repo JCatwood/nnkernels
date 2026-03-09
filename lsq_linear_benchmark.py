@@ -4,7 +4,7 @@ import sys
 import json
 
 from models import (
-    NNDT_Sum_NNTG,
+    PermInvarClass,
     MyMaternKernel,
     MyNSKernel_Scale,
     MyNSKernel_Lengthscale,

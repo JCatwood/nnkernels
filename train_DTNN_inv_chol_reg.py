@@ -5,11 +5,11 @@ import json
 
 from models import (
     GPVecchia,
-    NNDT_Sum_NNTG,
-    NNDT2_Sum_NNTG,
+    PermInvarClass,
     MyMaternKernel,
     MyNSKernel_Scale,
     MyNSKernel_Lengthscale,
+    PermPreserveClass
 )
 from loss import NllLoss, MyMSELoss
 from dataloader import Vecc_Dataloader_GP_sim, Vecc_Dataloader_Dataset
@@ -19,13 +19,13 @@ torch.manual_seed(1)
 # %% tuning parameters
 d = 2  # locs are sampled from R^d
 m = 30
-input_trans_type = "dist_direction_lastloc"
+input_trans_type = "locs_lastloc"
 nfeatures = input_transformed_dim(d, input_trans_type)
 use_NN_for_testing = False
 use_NN_for_training = False 
 n_replicates_for_training = 'all'  # can be 'all' or a positive integer 
 cond_on_train = True 
-prop_sim_data = 0.5  # proportion of training data in each batch that comes from the GP simulator (as opposed to the original data), only applicable when train_type is "data"
+penalty_multiplier = 1.0
 dropout_ratio = 0.5
 if len(sys.argv) > 2:
     train_type = sys.argv[1]
@@ -40,25 +40,27 @@ if len(sys.argv) > 2:
     else:
         data_name = sys.argv[2]
 else:
-    train_type = "data"  # ["simulation", "data"]
+    train_type = "simulation"  # ["simulation", "data"]
     kernel_gen_name = "MyNSKernel_Lengthscale"  # ["MyMaternKernel", "MyNSKernel_Scale", "MyNSKernel_Lengthscale"]
     data_name = f"GP_d{d}_rndlocs_mean0_NS_range_2000_1000"
 # %% model parameters
 if torch.cuda.is_available():
     device = torch.device('cuda')
     print(f"GPU is available. Using device: {torch.cuda.get_device_name(0)}")
-    size_DT = [nfeatures, 128, 128, 128, 64] 
-    size_TG_krig_coeff = [size_DT[-1] * 2, 128, 128, 128, 1]
-    size_TG_cond_sd_inv = [size_DT[-1], 128, 128, 128, 1]
+    size_phi = [nfeatures, 128, 128, 128, 128]
+    size_rho2 = [128, 128, 128, 128, 16]
+    size_rho1 = [nfeatures + 16, 128, 128, 128, 1]
+    size_rho = [128, 128, 128, 128, 1]
     n_batch = 2048
-    n_epoch = 10001
+    n_epoch = 30001
     n_epoch_GP = 4001
 else:
     print("GPU is not available. Using CPU.")
     device = torch.device('cpu')
-    size_DT = [nfeatures, 64, 64, 16] 
-    size_TG_krig_coeff = [size_DT[-1] * 2, 64, 64, 1]
-    size_TG_cond_sd_inv = [size_DT[-1], 64, 64, 1]
+    size_phi = [nfeatures, 64, 64, 64, 64]
+    size_rho2 = [64, 64, 64, 64, 8]
+    size_rho1 = [nfeatures + 8, 64, 64, 64, 1]
+    size_rho = [64, 64, 64, 64, 1]
     n_batch = 1024
     n_epoch = 4001
     n_epoch_GP = 4001
@@ -89,6 +91,7 @@ def lr_lambda(epoch):
     # return 0.001
 # %% loss func
 loss_function = NllLoss()
+loss_MSE = torch.nn.MSELoss()
 # %% GP training
 optimizer = torch.optim.Adam(model_GP.parameters(), lr=1)
 scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda)
@@ -123,13 +126,13 @@ model_GP.to("cpu")
 model_GP.eval()
 
 # %% initialize NN models
-model_krig_coeff = NNDT_Sum_NNTG(size_DT, size_TG_krig_coeff, concat_input=True, dropout=dropout_ratio)
-model_cond_sd_inv = NNDT_Sum_NNTG(size_DT, size_TG_cond_sd_inv, concat_input=False, dropout=dropout_ratio)
+model_krig_coeff = PermPreserveClass(size_phi, size_rho1, size_rho2)
+model_cond_sd_inv = PermInvarClass(size_phi, size_rho, concat_input=False)
 model_krig_coeff.to(device)
 model_cond_sd_inv.to(device)
 # %% Create a dataloader using the trained GP model for regularization
 dataloader_GP_reg = Vecc_Dataloader_GP_sim(
-    MyMaternKernel, [0.5, 0.1, 1.5, 0.01], d, target="y"
+    MyMaternKernel, [0.5, 0.1, 1.5, 0.01], d, target="krig_coeff"
     )
 dataloader_GP_reg.kernel.load_state_dict(model_GP.kernel.state_dict())
 # %% NN models training
@@ -140,32 +143,33 @@ scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda)
 model_krig_coeff.train()
 model_cond_sd_inv.train()
 timer = time.perf_counter()
-n_batch_sim = int(n_batch * prop_sim_data)
-n_batch_data = n_batch - n_batch_sim
 for epoch in range(n_epoch):
     with torch.no_grad():
-        X_batch_data, y_batch_data, y_true_data, length_data = dataloader.get_minibatch(
-            size=n_batch_data, m=m, n_replicates=n_replicates_for_training, 
+        X_batch, y_batch, y_true, length = dataloader.get_minibatch(
+            size=n_batch, m=m, n_replicates=n_replicates_for_training, 
             use_NN=use_NN_for_training
             )
-        X_batch_sim, y_batch_sim, y_true_sim, length_sim = dataloader_GP_reg.get_minibatch(
-            size=n_batch_sim, m=m
+        X_batch_reg, y_batch_reg, y_true_reg, length_reg = dataloader_GP_reg.get_minibatch(
+            size=n_batch, m=m
             )
-        X_batch = torch.cat((X_batch_data, X_batch_sim), dim=0)
-        y_batch = torch.cat((y_batch_data, y_batch_sim), dim=0)
-        y_true = torch.cat((y_true_data, y_true_sim), dim=0)
-        length = torch.cat((length_data, length_sim), dim=0)
-
-        input = input_transform(X_batch, None, length, type=input_trans_type)
-        input = input[:, :-1, :]
+        X_batch_trans = input_transform(X_batch, None, length, type=input_trans_type)
+        X_batch_reg_trans = input_transform(X_batch_reg, None, length_reg, type=input_trans_type)
+        X_batch_trans = X_batch_trans[:, :-1, :]
         y_batch = y_batch[:, :-1, :]
-        input, y_batch, y_true = input.to(device), y_batch.to(device), y_true.to(device)
+        X_batch_reg_trans = X_batch_reg_trans[:, :-1, :]
+        X_batch_trans, y_batch, y_true, X_batch_reg_trans , y_true_reg = (
+            X_batch_trans.to(device), y_batch.to(device), y_true.to(device), 
+            X_batch_reg_trans.to(device), y_true_reg.to(device)
+        )
     # predict mean and stderr
     optimizer.zero_grad()
-    krig_coeff = model_krig_coeff(input)
+    krig_coeff = model_krig_coeff(X_batch_trans)
     y_pred = torch.sum(krig_coeff * y_batch, dim=1)
-    y_stderr_inv = torch.exp(model_cond_sd_inv(input))
-    loss = loss_function(y_pred, y_true, stderr_inv=y_stderr_inv)
+    y_stderr_inv = torch.exp(model_cond_sd_inv(X_batch_trans))
+    krig_coeff_reg = model_krig_coeff(X_batch_reg_trans)
+    penalty = penalty_multiplier * loss_MSE(krig_coeff_reg, y_true_reg)
+    loss_inference = loss_function(y_pred, y_true, stderr_inv=y_stderr_inv)
+    loss = loss_inference + penalty
     loss.backward()
     optimizer.step()
     scheduler.step()
@@ -175,7 +179,7 @@ for epoch in range(n_epoch):
         print(f"Elapsed time: {timer - timer_prev} seconds", flush=True)
         crt_lr = optimizer.param_groups[0]["lr"]
         print(f"Current LR: {crt_lr}", flush=True)
-        print(f"Loss after {epoch} iterations is {loss.detach().item()}", flush=True)
+        print(f"Loss after {epoch} iterations is {loss_inference.detach().item()}", flush=True)
 # %% evaluate
 model_krig_coeff.eval()
 model_cond_sd_inv.eval()
@@ -224,9 +228,10 @@ with torch.no_grad():
             "kernel_sim": kernel_gen_name,
             "model": "NN2",
             "m": m,
-            "size_DT": size_DT,
-            "size_TG_krig_coeff": size_TG_krig_coeff,
-            "size_TG_cond_sd_inv": size_TG_cond_sd_inv,
+            "size_phi": size_phi,
+            "size_rho1": size_rho1,
+            "size_rho2": size_rho2,
+            "size_rho": size_rho,
             "transformation": input_trans_type,
             "NLL": loss_NLL_val.item(),
             "MSE": loss_MSE_val.item(),
@@ -239,9 +244,10 @@ with torch.no_grad():
             "data_name": data_name,
             "model": "NN2",
             "m": m,
-            "size_DT": size_DT,
-            "size_TG_krig_coeff": size_TG_krig_coeff,
-            "size_TG_cond_sd_inv": size_TG_cond_sd_inv,
+            "size_phi": size_phi,
+            "size_rho1": size_rho1,
+            "size_rho2": size_rho2,
+            "size_rho": size_rho,
             "transformation": input_trans_type,
             "NLL": loss_NLL_val.item(),
             "MSE": loss_MSE_val.item(),
