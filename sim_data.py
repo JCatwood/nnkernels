@@ -46,7 +46,7 @@ def sim_GP_data(mean_obj, kernel, n_train, n_test, d=2, mean_name="meanname",
 
     torch.manual_seed(seed)
     if locs is None:
-        locs = torch.rand(n, d)
+        locs = torch.from_numpy(LatinHypercube(d).random(n)).float()
     mean_y = mean_obj(locs)
     covmat = kernel(locs).to_dense()
     L = torch.linalg.cholesky(covmat)
@@ -65,49 +65,22 @@ def sim_GP_data(mean_obj, kernel, n_train, n_test, d=2, mean_name="meanname",
 
 if __name__ == "__main__":
     # GP
+    n = 2500
     n_train = 2000
-    n_test = 1000
+    n_test = 500
     d = 2
     mean_obj_mean0 = ZeroMean()
     mean_obj_Paraboloid = ParaboloidMean()
-    kernel_Matern = MyMaternKernel(1.0, 0.3, 1.5, 0.01)
-    kernel_NS_scale = MyNSKernel_Scale(-0.5, -1.2, -1.44, 0.3, 1.5, 0.01)
-    kernel_NS_lengthrange = MyNSKernel_Lengthscale(-0.5, -1.2, -1.44, 2.0, 0.01)
+    kernel_Matern = MyMaternKernel(1.0, 0.03, 1.5, 0.01)
+    kernel_NS_scale = MyNSKernel_Scale(1.6, 0.75, -0.75, 0.03, 0.5, 0.01)
+    kernel_NS_lengthrange = MyNSKernel_Lengthscale(0.1, 0.045, -0.045, 1.0, 0.01)
     kernel_and_name = zip([kernel_Matern, kernel_NS_scale, kernel_NS_lengthrange], 
                           ["Matern", "NS_scale", "NS_range"])
-    seeds = range(20)
-    N = len(seeds)
-    offset_train = torch.arange(N) * n_train
-    offset_test = torch.arange(N) * n_test
-    for kernel, name in kernel_and_name:
-        for seed in seeds:
-            sim_GP_data(mean_obj_mean0, kernel, n_train, n_test, d=d,
-                        mean_name="mean0", kernel_name=name, seed=seed, mode='a')
-        fn = file_name(n_train, n_test, d, "mean0", name, locs=None)
-        df_offset_train = pandas.DataFrame(offset_train)
-        df_offset_test = pandas.DataFrame(offset_test)
-        df_offset_train.to_csv(fn + "train_offset.csv", index=False, header=False)
-        df_offset_test.to_csv(fn + "test_offset.csv", index=False, header=False)
     
-    kernel_and_name = zip([kernel_Matern, kernel_NS_scale, kernel_NS_lengthrange], 
-                          ["Matern", "NS_scale", "NS_range"])
-    seeds_train = range(80)
-    seeds_test = range(80, 100)
-    n = 100
-    locs = torch.from_numpy(LatinHypercube(d).random(n)).float()
-    offset_train = torch.arange(len(seeds_train)) * n
-    offset_test = torch.arange(len(seeds_test)) * n
-    for kernel, name in kernel_and_name:
-        fn = file_name(len(seeds_train), len(seeds_test), d, "mean0", name, locs=locs)
-        for seed in seeds_train:
-            sim_GP_data(mean_obj_mean0, kernel, n_train=n, n_test=0, d=d,
-                        mean_name="mean0", kernel_name=name, seed=seed, mode='a',
-                        locs=locs, fn=fn)
-        for seed in seeds_test:
-            sim_GP_data(mean_obj_mean0, kernel, n_train=0, n_test=n, d=d,
-                        mean_name="mean0", kernel_name=name, seed=seed, mode='a',
-                        locs=locs, fn=fn)
-        df_offset_train = pandas.DataFrame(offset_train)
-        df_offset_test = pandas.DataFrame(offset_test)
-        df_offset_train.to_csv(fn + "train_offset.csv", index=False, header=False)
-        df_offset_test.to_csv(fn + "test_offset.csv", index=False, header=False)
+    for kernel, kernel_name in kernel_and_name:
+        fn_base = file_name(n_train, n_test, d, "mean0", kernel_name, locs=None)
+        for seed in range(20):
+            fn = fn_base + f"seed_{seed}/"
+            sim_GP_data(mean_obj_mean0, kernel, n_train=n_train, n_test=n_test, d=d,
+                        mean_name="mean0", kernel_name=kernel_name, seed=seed, mode='w',
+                        locs=None, fn=fn)
