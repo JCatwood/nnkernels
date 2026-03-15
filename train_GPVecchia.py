@@ -9,12 +9,8 @@ from loss import NllLoss
 
 torch.manual_seed(1)
 # %% tuning parameters
-d = 2  # locs are sampled from R^d
+d = 2  # locs are sampled from R^d, only used when train_type is "simulation"
 m = 30
-use_NN_for_testing = True
-use_NN_for_training = True # whether to use NN for training data selection. If False, random selection will be used. Note that using NN for training is only supported for datasets with fixed locations between replicates.
-cond_on_train = True
-n_replicates_for_training = 'all'  # can be 'all' or a positive integer specifying the number of replicates to use for training
 if len(sys.argv) > 3:
     train_type = sys.argv[1]
     assert train_type in ("data", "simulation"), "Invalid train_type (first) argument"
@@ -33,11 +29,20 @@ if len(sys.argv) > 3:
         ), "Invalid kernel_gen_name (third) arguments"
     else:
         data_name = sys.argv[3]
+        if len(sys.argv) > 4:
+            n_replicates = int(sys.argv[4])
+        else:
+            n_replicates = 1
 else:
-    train_type = "simulation"  # ["simulation", "data"]
-    data_name = f"GP_d{d}_fixedlocs_mean0_NS_range_80_20"
+    train_type = "data"  # ["simulation", "data"]
+    data_name = "GP_d2_rndlocs_mean0_Matern_2000_500"  # only used when train_type is "data"
     kernel_gen_name = "MyMaternKernel"  # ["MyMaternKernel", "MyNSKernel_Scale", "MyNSKernel_Lengthscale"]
     kernel_train_name = "MyMaternKernel"  # ["MyMaternKernel", "MyNSKernel_Scale", "MyNSKernel_Lengthscale"]
+    n_replicates = 20 # only used when train_type is "data" and the dataset has sufficient replicates
+if n_replicates > 1:
+    data_seeds = range(n_replicates)
+else:
+    data_seeds = None
 
 # %% model parameters
 if torch.cuda.is_available():
@@ -64,7 +69,7 @@ if train_type == "simulation":
         KernelClass = MyNSKernel_Lengthscale
     dataloader = Vecc_Dataloader_GP_sim(KernelClass, kernel_parms_init, d, "y")
 elif train_type == "data":
-    dataloader = Vecc_Dataloader_Dataset(data_name)
+    dataloader = Vecc_Dataloader_Dataset(data_name, data_seeds)
 else:
     raise Exception("Unexpected train_type")
 # %% initialize model
@@ -97,14 +102,8 @@ model.train()
 timer = time.perf_counter()
 for epoch in range(n_epoch):
     with torch.no_grad():
-        X_batch, y_batch, y_true, length = dataloader.get_minibatch(
-            size=n_batch, m=m, n_replicates=n_replicates_for_training, use_NN=use_NN_for_training
-    )
-        X_batch, y_batch, y_true = (
-            X_batch.to(device),
-            y_batch.to(device),
-            y_true.to(device),
-        )
+        X_batch, y_batch, y_true, length = dataloader.get_minibatch(size=n_batch, m=m)
+        X_batch, y_batch, y_true = X_batch.to(device), y_batch.to(device), y_true.to(device)
     # predict the target
     optimizer.zero_grad()
     y_pred, y_stderr = model(X_batch, y_batch, length=length)
@@ -129,22 +128,7 @@ with torch.no_grad():
         torch.manual_seed(123)
         X_batch, y_batch, y_true, length = dataloader.get_test_batch(size=n_batch*10, m=m)
     else:
-        X_batch_list = []
-        y_batch_list = []
-        y_true_list = []
-        length_list = []
-        for seed in range(dataloader.N_test):
-            X_batch, y_batch, y_true, length = dataloader.get_test_batch(
-                seed=seed, use_NN=use_NN_for_testing, cond_on_train=cond_on_train
-                )
-            X_batch_list.append(X_batch)
-            y_batch_list.append(y_batch)
-            y_true_list.append(y_true)
-            length_list.append(length)
-        X_batch = torch.cat(X_batch_list, dim=0)
-        y_batch = torch.cat(y_batch_list, dim=0)
-        y_true = torch.cat(y_true_list, dim=0)
-        length = torch.cat(length_list, dim=0)
+        X_batch, y_batch, y_true, length = dataloader.get_test_batch(size='all', m=m)
     y_pred, y_stderr = model(X_batch, y_batch, length=length)
     loss_NLL_val = loss_NLL(y_pred, y_true, y_stderr)
     loss_MSE_val = loss_MSE(y_pred, y_true)

@@ -17,32 +17,40 @@ from input_transform import input_transformed_dim, input_transform
 
 torch.manual_seed(1)
 # %% tuning parameters
-d = 2  # locs are sampled from R^d
+d = 2  # locs are sampled from R^d, only used when train_type is "simulation"
 m = 30
 input_trans_type = "locs_lastloc"
 nfeatures = input_transformed_dim(d, input_trans_type)
-use_NN_for_testing = False
-use_NN_for_training = False 
-n_replicates_for_training = 'all'  # can be 'all' or a positive integer 
-cond_on_train = True 
-penalty_multiplier = 1.0
+penalty_multiplier = 3.0
 dropout_ratio = 0.5
-if len(sys.argv) > 2:
+if len(sys.argv) > 3:
     train_type = sys.argv[1]
     assert train_type in ("data", "simulation"), "Invalid train_type (first) argument"
+    loss_name = sys.argv[2]
+    assert loss_name in ("NLL", "MSE"), "Invalid loss_name (2nd) argument"
     if train_type == "simulation":
-        kernel_gen_name = sys.argv[2]
+        kernel_gen_name = sys.argv[3]
         assert kernel_gen_name in (
             "MyMaternKernel",
             "MyNSKernel_Scale",
             "MyNSKernel_Lengthscale",
         ), "Invalid kernel_gen_name (third) arguments"
     else:
-        data_name = sys.argv[2]
+        data_name = sys.argv[3]
+        if len(sys.argv) > 4:
+            n_replicates = int(sys.argv[4])
+        else:
+            n_replicates = 1
 else:
-    train_type = "simulation"  # ["simulation", "data"]
-    kernel_gen_name = "MyNSKernel_Lengthscale"  # ["MyMaternKernel", "MyNSKernel_Scale", "MyNSKernel_Lengthscale"]
-    data_name = f"GP_d{d}_rndlocs_mean0_NS_range_2000_1000"
+    train_type = "data"  # ["simulation", "data"]
+    kernel_gen_name = "MyMaternKernel"  # ["MyMaternKernel", "MyNSKernel_Scale", "MyNSKernel_Lengthscale"]
+    data_name = "GP_d2_rndlocs_mean0_Matern_2000_500"  # only used when train_type is "data"
+    n_replicates = 20 # only used when train_type is "data" and the dataset has sufficient replicates
+    loss_name = "NLL"
+if n_replicates > 1:
+    data_seeds = range(n_replicates)
+else:
+    data_seeds = None
 # %% model parameters
 if torch.cuda.is_available():
     device = torch.device('cuda')
@@ -78,7 +86,7 @@ if train_type == "simulation":
         KernelClass = MyNSKernel_Lengthscale
     dataloader = Vecc_Dataloader_GP_sim(KernelClass, kernel_parms_init, d, "y")
 elif train_type == "data":
-    dataloader = Vecc_Dataloader_Dataset(data_name)
+    dataloader = Vecc_Dataloader_Dataset(data_name, data_seeds)
 else:
     raise Exception("Unexpected train_type")
 # %% initialize GP model as regularizer
@@ -100,14 +108,8 @@ model_GP.train()
 timer = time.perf_counter()
 for epoch in range(n_epoch_GP):
     with torch.no_grad():
-        X_batch, y_batch, y_true, length = dataloader.get_minibatch(
-            size=n_batch, m=m, n_replicates=n_replicates_for_training, use_NN=use_NN_for_training
-            )
-        X_batch, y_batch, y_true = (
-            X_batch.to(device),
-            y_batch.to(device),
-            y_true.to(device),
-        )
+        X_batch, y_batch, y_true, length = dataloader.get_minibatch(size=n_batch, m=m)
+        X_batch, y_batch, y_true = X_batch.to(device), y_batch.to(device), y_true.to(device)
     # predict the target
     optimizer.zero_grad()
     y_pred, y_stderr = model_GP(X_batch, y_batch, length=length)
@@ -135,6 +137,37 @@ dataloader_GP_reg = Vecc_Dataloader_GP_sim(
     MyMaternKernel, [0.5, 0.1, 1.5, 0.01], d, target="krig_coeff"
     )
 dataloader_GP_reg.kernel.load_state_dict(model_GP.kernel.state_dict())
+# %% NN initial training with regularization from the trained GP model
+optimizer = torch.optim.Adam(
+    list(model_krig_coeff.parameters()), lr=1
+)
+scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda)
+model_krig_coeff.train()
+timer = time.perf_counter()
+for epoch in range(n_epoch):
+    with torch.no_grad():
+        X_batch_reg, y_batch_reg, y_true_reg, length_reg = dataloader_GP_reg.get_minibatch(
+            size=n_batch, m=m
+            )
+        X_batch_reg_trans = input_transform(X_batch_reg, None, length_reg, type=input_trans_type)
+        X_batch_reg_trans = X_batch_reg_trans[:, :-1, :]
+        X_batch_reg_trans, y_true_reg = (
+            X_batch_reg_trans.to(device), y_true_reg.to(device)
+        )
+    # predict mean and stderr
+    optimizer.zero_grad()
+    krig_coeff_reg = model_krig_coeff(X_batch_reg_trans)
+    loss = loss_MSE(krig_coeff_reg, y_true_reg)
+    loss.backward()
+    optimizer.step()
+    scheduler.step()
+    if epoch % 1000 == 0:
+        timer_prev = timer
+        timer = time.perf_counter()
+        print(f"Elapsed time: {timer - timer_prev} seconds", flush=True)
+        crt_lr = optimizer.param_groups[0]["lr"]
+        print(f"Current LR: {crt_lr}", flush=True)
+        print(f"MSE of kriging coeff after {epoch} iterations is {loss.detach().item()}", flush=True)
 # %% NN models training
 optimizer = torch.optim.Adam(
     list(model_krig_coeff.parameters()) + list(model_cond_sd_inv.parameters()), lr=1
@@ -145,10 +178,7 @@ model_cond_sd_inv.train()
 timer = time.perf_counter()
 for epoch in range(n_epoch):
     with torch.no_grad():
-        X_batch, y_batch, y_true, length = dataloader.get_minibatch(
-            size=n_batch, m=m, n_replicates=n_replicates_for_training, 
-            use_NN=use_NN_for_training
-            )
+        X_batch, y_batch, y_true, length = dataloader.get_minibatch(size=n_batch, m=m)
         X_batch_reg, y_batch_reg, y_true_reg, length_reg = dataloader_GP_reg.get_minibatch(
             size=n_batch, m=m
             )
@@ -179,7 +209,7 @@ for epoch in range(n_epoch):
         print(f"Elapsed time: {timer - timer_prev} seconds", flush=True)
         crt_lr = optimizer.param_groups[0]["lr"]
         print(f"Current LR: {crt_lr}", flush=True)
-        print(f"Loss after {epoch} iterations is {loss_inference.detach().item()}", flush=True)
+        print(f"Inference loss after {epoch} iterations is {loss_inference.detach().item()}", flush=True)
 # %% evaluate
 model_krig_coeff.eval()
 model_cond_sd_inv.eval()
@@ -192,22 +222,7 @@ with torch.no_grad():
         torch.manual_seed(123)
         X_batch, y_batch, y_true, length = dataloader.get_test_batch(size=n_batch*10, m=m)
     else:
-        X_batch_list = []
-        y_batch_list = []
-        y_true_list = []
-        length_list = []
-        for seed in range(dataloader.N_test):
-            X_batch, y_batch, y_true, length = dataloader.get_test_batch(
-                seed=seed, m=m, use_NN=use_NN_for_testing, cond_on_train=cond_on_train
-                )
-            X_batch_list.append(X_batch)
-            y_batch_list.append(y_batch)
-            y_true_list.append(y_true)
-            length_list.append(length)
-        X_batch = torch.cat(X_batch_list, dim=0)
-        y_batch = torch.cat(y_batch_list, dim=0)
-        y_true = torch.cat(y_true_list, dim=0)
-        length = torch.cat(length_list, dim=0)
+        X_batch, y_batch, y_true, length = dataloader.get_test_batch(size='all', m=m)
     # GP prediction first
     y_pred_GP, y_stderr_GP = model_GP(X_batch, y_batch, length=length)
     loss_NLL_GP = loss_NLL(y_pred_GP, y_true, y_stderr_GP)
