@@ -146,18 +146,15 @@ model_krig_coeff.train()
 timer = time.perf_counter()
 for epoch in range(n_epoch):
     with torch.no_grad():
-        X_batch_reg, y_batch_reg, y_true_reg, length_reg = dataloader_GP_reg.get_minibatch(
-            size=n_batch, m=m
-            )
-        X_batch_reg_trans = input_transform(X_batch_reg, None, length_reg, type=input_trans_type)
-        X_batch_reg_trans = X_batch_reg_trans[:, :-1, :]
-        X_batch_reg_trans, y_true_reg = (
-            X_batch_reg_trans.to(device), y_true_reg.to(device)
-        )
+        X_batch, y_batch, y_true, length = dataloader.get_minibatch(size=n_batch, m=m)
+        target = model_GP.krig_coeff(X_batch)
+        X_batch_trans = input_transform(X_batch, None, length, type=input_trans_type)
+        X_batch_trans = X_batch_trans[:, :-1, :]
+        X_batch_trans, target = (X_batch_trans.to(device), target.to(device))
     # predict mean and stderr
     optimizer.zero_grad()
-    krig_coeff_reg = model_krig_coeff(X_batch_reg_trans)
-    loss = loss_MSE(krig_coeff_reg, y_true_reg)
+    krig_coeff_reg = model_krig_coeff(X_batch_trans)
+    loss = loss_MSE(krig_coeff_reg, target)
     loss.backward()
     optimizer.step()
     scheduler.step()
@@ -179,25 +176,20 @@ timer = time.perf_counter()
 for epoch in range(n_epoch):
     with torch.no_grad():
         X_batch, y_batch, y_true, length = dataloader.get_minibatch(size=n_batch, m=m)
-        X_batch_reg, y_batch_reg, y_true_reg, length_reg = dataloader_GP_reg.get_minibatch(
-            size=n_batch, m=m
-            )
+        krig_coeff_reg = model_GP.krig_coeff(X_batch)
         X_batch_trans = input_transform(X_batch, None, length, type=input_trans_type)
-        X_batch_reg_trans = input_transform(X_batch_reg, None, length_reg, type=input_trans_type)
         X_batch_trans = X_batch_trans[:, :-1, :]
         y_batch = y_batch[:, :-1, :]
-        X_batch_reg_trans = X_batch_reg_trans[:, :-1, :]
-        X_batch_trans, y_batch, y_true, X_batch_reg_trans , y_true_reg = (
+        X_batch_trans, y_batch, y_true, krig_coeff_reg = (
             X_batch_trans.to(device), y_batch.to(device), y_true.to(device), 
-            X_batch_reg_trans.to(device), y_true_reg.to(device)
+            krig_coeff_reg.to(device)
         )
     # predict mean and stderr
     optimizer.zero_grad()
     krig_coeff = model_krig_coeff(X_batch_trans)
     y_pred = torch.sum(krig_coeff * y_batch, dim=1)
     y_stderr_inv = torch.exp(model_cond_sd_inv(X_batch_trans))
-    krig_coeff_reg = model_krig_coeff(X_batch_reg_trans)
-    penalty = penalty_multiplier * loss_MSE(krig_coeff_reg, y_true_reg)
+    penalty = penalty_multiplier * loss_MSE(krig_coeff_reg, krig_coeff)
     loss_inference = loss_function(y_pred, y_true, stderr_inv=y_stderr_inv)
     loss = loss_inference + penalty
     loss.backward()

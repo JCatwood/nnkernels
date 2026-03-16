@@ -145,6 +145,15 @@ class GPVecchia(torch.nn.Module):
             cond_mean = cond_mean_tmp[torch.arange(N), length - 1, 0].unsqueeze(-1)
         
         return cond_mean, cond_sd
+    
+    def krig_coeff(self, locs_batch):
+        covmat = self.kernel(locs_batch)
+        L = torch.linalg.cholesky(covmat)
+        covmat_inv = torch.cholesky_inverse(L, upper=False)
+        invchol_lastcol = covmat_inv[:, :, -1:] / \
+            (covmat_inv[:, -1:, -1:] ** 0.5) # [N, m+1, 1]
+        coeff = - invchol_lastcol[:, :-1, :] / invchol_lastcol[:, -1:, :] # [N, m, 1]
+        return coeff
 
 class MyNSKernel_Scale(gpytorch.kernels.MaternKernel):
     """
