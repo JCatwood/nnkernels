@@ -19,7 +19,7 @@ torch.manual_seed(1)
 # %% tuning parameters
 d = 2  # locs are sampled from R^d, only used when train_type is "simulation"
 m = 30
-input_trans_type = "locs_lastloc"
+input_trans_type = "dist_direction_lastloc"
 nfeatures = input_transformed_dim(d, input_trans_type)
 penalty_multiplier = 3.0
 dropout_ratio = 0.5
@@ -42,9 +42,9 @@ if len(sys.argv) > 3:
         else:
             n_replicates = 1
 else:
-    train_type = "data"  # ["simulation", "data"]
-    kernel_gen_name = "MyMaternKernel"  # ["MyMaternKernel", "MyNSKernel_Scale", "MyNSKernel_Lengthscale"]
-    data_name = "GP_d2_rndlocs_mean0_Matern_2000_500"  # only used when train_type is "data"
+    train_type = "simulation"  # ["simulation", "data"]
+    kernel_gen_name = "MyNSKernel_Lengthscale"  # ["MyMaternKernel", "MyNSKernel_Scale", "MyNSKernel_Lengthscale"]
+    data_name = "GP_d2_rndlocs_mean0_NS_scale_2000_500"  # only used when train_type is "data"
     n_replicates = 20 # only used when train_type is "data" and the dataset has sufficient replicates
     loss_name = "NLL"
 if n_replicates > 1:
@@ -55,9 +55,9 @@ else:
 if torch.cuda.is_available():
     device = torch.device('cuda')
     print(f"GPU is available. Using device: {torch.cuda.get_device_name(0)}")
-    size_phi = [nfeatures, 128, 128, 128, 128]
-    size_rho2 = [128, 128, 128, 128, 16]
-    size_rho1 = [nfeatures + 16, 128, 128, 128, 1]
+    size_phi = [nfeatures, 128, 128, 128, 128, 128]
+    size_rho2 = [128, 128, 128, 128, 128, 16]
+    size_rho1 = [nfeatures + 16, 128, 128, 128, 128, 1]
     size_rho = [128, 128, 128, 128, 1]
     n_batch = 2048
     n_epoch = 30001
@@ -79,10 +79,10 @@ if train_type == "simulation":
         kernel_parms_init = [1.0, 0.3, 1.5, 0.01]
         KernelClass = MyMaternKernel
     elif kernel_gen_name == "MyNSKernel_Scale":
-        kernel_parms_init = [1.6, 0.75, -0.75, 0.3, 0.5, 0.01]
+        kernel_parms_init = [0.0, 0.5, -0.5, 0.3, 0.5, 0.01]
         KernelClass = MyNSKernel_Scale
     elif kernel_gen_name == "MyNSKernel_Lengthscale":
-        kernel_parms_init = [1.0, 0.45, -0.45, 1.0, 0.01]
+        kernel_parms_init = [-2., 1., -1., 1.0, 0.01]
         KernelClass = MyNSKernel_Lengthscale
     dataloader = Vecc_Dataloader_GP_sim(KernelClass, kernel_parms_init, d, "y")
 elif train_type == "data":
