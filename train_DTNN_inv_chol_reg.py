@@ -47,10 +47,11 @@ else:
     data_name = "GP_d2_rndlocs_mean0_NS_scale_2000_500"  # only used when train_type is "data"
     n_replicates = 20 # only used when train_type is "data" and the dataset has sufficient replicates
     loss_name = "NLL"
-if n_replicates > 1:
-    data_seeds = range(n_replicates)
-else:
-    data_seeds = None
+if train_type == "data":
+    if n_replicates > 1:
+        data_seeds = range(n_replicates)
+    else:
+        data_seeds = None
 # %% model parameters
 if torch.cuda.is_available():
     device = torch.device('cuda')

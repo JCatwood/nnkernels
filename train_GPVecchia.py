@@ -39,10 +39,11 @@ else:
     kernel_gen_name = "MyNSKernel_Lengthscale"  # ["MyMaternKernel", "MyNSKernel_Scale", "MyNSKernel_Lengthscale"]
     kernel_train_name = "MyMaternKernel"  # ["MyMaternKernel", "MyNSKernel_Scale", "MyNSKernel_Lengthscale"]
     n_replicates = 20 # only used when train_type is "data" and the dataset has sufficient replicates
-if n_replicates > 1:
-    data_seeds = range(n_replicates)
-else:
-    data_seeds = None
+if train_type == "data":
+    if n_replicates > 1:
+        data_seeds = range(n_replicates)
+    else:
+        data_seeds = None
 
 # %% model parameters
 if torch.cuda.is_available():
