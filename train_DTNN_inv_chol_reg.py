@@ -21,7 +21,7 @@ d = 2  # locs are sampled from R^d, only used when train_type is "simulation"
 m = 30
 input_trans_type = "dist_direction_lastloc"
 nfeatures = input_transformed_dim(d, input_trans_type)
-penalty_multiplier = 3.0
+penalty_multiplier = 10.0
 dropout_ratio = 0.5
 if len(sys.argv) > 3:
     train_type = sys.argv[1]
@@ -139,6 +139,7 @@ dataloader_GP_reg = Vecc_Dataloader_GP_sim(
     )
 dataloader_GP_reg.kernel.load_state_dict(model_GP.kernel.state_dict())
 # %% NN initial training with regularization from the trained GP model
+model_GP.to(device)
 optimizer = torch.optim.Adam(
     list(model_krig_coeff.parameters()), lr=1
 )
@@ -148,10 +149,10 @@ timer = time.perf_counter()
 for epoch in range(n_epoch):
     with torch.no_grad():
         X_batch, y_batch, y_true, length = dataloader.get_minibatch(size=n_batch, m=m)
+        X_batch, length = X_batch.to(device), length.to(device)
         target = model_GP.krig_coeff(X_batch)
         X_batch_trans = input_transform(X_batch, None, length, type=input_trans_type)
         X_batch_trans = X_batch_trans[:, :-1, :]
-        X_batch_trans, target = (X_batch_trans.to(device), target.to(device))
     # predict mean and stderr
     optimizer.zero_grad()
     krig_coeff_reg = model_krig_coeff(X_batch_trans)
@@ -167,6 +168,7 @@ for epoch in range(n_epoch):
         print(f"Current LR: {crt_lr}", flush=True)
         print(f"MSE of kriging coeff after {epoch} iterations is {loss.detach().item()}", flush=True)
 # %% NN models training
+model_GP.to(device)
 optimizer = torch.optim.Adam(
     list(model_krig_coeff.parameters()) + list(model_cond_sd_inv.parameters()), lr=1
 )
@@ -177,14 +179,12 @@ timer = time.perf_counter()
 for epoch in range(n_epoch):
     with torch.no_grad():
         X_batch, y_batch, y_true, length = dataloader.get_minibatch(size=n_batch, m=m)
+        X_batch, y_batch, y_true, length = X_batch.to(device), y_batch.to(device), \
+            y_true.to(device), length.to(device)
         krig_coeff_reg = model_GP.krig_coeff(X_batch)
         X_batch_trans = input_transform(X_batch, None, length, type=input_trans_type)
         X_batch_trans = X_batch_trans[:, :-1, :]
         y_batch = y_batch[:, :-1, :]
-        X_batch_trans, y_batch, y_true, krig_coeff_reg = (
-            X_batch_trans.to(device), y_batch.to(device), y_true.to(device), 
-            krig_coeff_reg.to(device)
-        )
     # predict mean and stderr
     optimizer.zero_grad()
     krig_coeff = model_krig_coeff(X_batch_trans)
@@ -208,6 +208,7 @@ model_krig_coeff.eval()
 model_cond_sd_inv.eval()
 model_krig_coeff.to("cpu")
 model_cond_sd_inv.to("cpu")
+model_GP.to("cpu")
 loss_MSE = torch.nn.MSELoss()
 loss_NLL = NllLoss()
 with torch.no_grad():
