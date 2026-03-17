@@ -14,6 +14,7 @@ d = 2  # locs are sampled from R^d, only used when train_type is "simulation"
 m = 30
 input_trans_type = "dist_direction_lastloc"
 nfeatures = input_transformed_dim(d, input_trans_type)
+dropout_ratio = 0.25
 if len(sys.argv) > 3:
     train_type = sys.argv[1]
     assert train_type in ("data", "simulation"), "Invalid train_type (first) argument"
@@ -85,7 +86,10 @@ elif train_type == "data":
 else:
     raise Exception("Unexpected train_type")
 # %% initialize model
-model_krig_coeff = PermPreserveClass(size_phi, size_rho1, size_rho2)
+if train_type == "data":
+    model_krig_coeff = PermPreserveClass(size_phi, size_rho1, size_rho2, dropout=dropout_ratio)
+else:
+    model_krig_coeff = PermPreserveClass(size_phi, size_rho1, size_rho2)
 model_cond_sd_inv = PermInvarClass(size_phi, size_rho, concat_input=False)
 model_krig_coeff.to(device)
 model_cond_sd_inv.to(device)

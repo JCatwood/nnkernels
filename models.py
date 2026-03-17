@@ -48,13 +48,15 @@ class PermPreserveClass(torch.nn.Module):
     """
     TBD
     """
-    def __init__(self, phi_sz_seq, rho1_sz_seq, rho2_sz_seq, *args, **kwargs):
+    def __init__(self, phi_sz_seq, rho1_sz_seq, rho2_sz_seq, dropout=0.0, *args, **kwargs):
         super().__init__()
         layers = []
         for i in range(len(phi_sz_seq) - 1):
             layers.append(nn.Linear(phi_sz_seq[i], phi_sz_seq[i + 1]))
             if i < len(phi_sz_seq) -  2:
                 layers.append(nn.ReLU())
+        if dropout > 0.0:
+            layers.append(torch.nn.Dropout(p=dropout))
         self.phi = nn.Sequential(*layers)
 
         layers = []
