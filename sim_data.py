@@ -79,7 +79,7 @@ if __name__ == "__main__":
     
     for kernel, kernel_name in kernel_and_name:
         fn_base = file_name(n_train, n_test, d, "mean0", kernel_name, locs=None)
-        for seed in range(20):
+        for seed in range(50):
             fn = fn_base + f"seed_{seed}/"
             sim_GP_data(mean_obj_mean0, kernel, n_train=n_train, n_test=n_test, d=d,
                         mean_name="mean0", kernel_name=kernel_name, seed=seed, mode='w',

@@ -88,9 +88,10 @@ else:
 # %% initialize model
 if train_type == "data":
     model_krig_coeff = PermPreserveClass(size_phi, size_rho1, size_rho2, dropout=dropout_ratio)
+    model_cond_sd_inv = PermInvarClass(size_phi, size_rho, dropout=dropout_ratio, concat_input=False)
 else:
     model_krig_coeff = PermPreserveClass(size_phi, size_rho1, size_rho2)
-model_cond_sd_inv = PermInvarClass(size_phi, size_rho, concat_input=False)
+    model_cond_sd_inv = PermInvarClass(size_phi, size_rho, concat_input=False)
 model_krig_coeff.to(device)
 model_cond_sd_inv.to(device)
 # %% scheduler
