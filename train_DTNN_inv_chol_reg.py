@@ -23,6 +23,7 @@ input_trans_type = "dist_direction_lastloc"
 nfeatures = input_transformed_dim(d, input_trans_type)
 penalty_multiplier = float(m)
 dropout_ratio = 0.25
+jitter_ratio = 0.1
 if len(sys.argv) > 3:
     train_type = sys.argv[1]
     assert train_type in ("data", "simulation"), "Invalid train_type (first) argument"
@@ -155,13 +156,16 @@ for epoch in range(n_epoch):
     with torch.no_grad():
         X_batch, y_batch, y_true, length = dataloader.get_minibatch(size=n_batch, m=m)
         X_batch, length = X_batch.to(device), length.to(device)
-        target = model_GP.krig_coeff(X_batch)
-        X_batch_trans = input_transform(X_batch, None, length, type=input_trans_type)
-        X_batch_trans = X_batch_trans[:, :-1, :]
+        X_batch_sd = torch.std(X_batch, dim=-1, keepdim=True)
+        jitter = torch.randn_like(X_batch) * X_batch_sd * jitter_ratio
+        X_batch_jittered = X_batch + jitter
+        krig_coeff_true_jitter = model_GP.krig_coeff(X_batch_jittered)
+        X_batch_trans_jitter = input_transform(X_batch_jittered, None, length, type=input_trans_type)
+        X_batch_trans_jitter = X_batch_trans_jitter[:, :-1, :]
     # predict mean and stderr
     optimizer.zero_grad()
-    krig_coeff_reg = model_krig_coeff(X_batch_trans)
-    loss = loss_MSE(krig_coeff_reg, target)
+    krig_coeff = model_krig_coeff(X_batch_trans_jitter)
+    loss = loss_MSE(krig_coeff, krig_coeff_true_jitter)
     loss.backward()
     optimizer.step()
     scheduler.step()
@@ -186,16 +190,22 @@ for epoch in range(n_epoch):
         X_batch, y_batch, y_true, length = dataloader.get_minibatch(size=n_batch, m=m)
         X_batch, y_batch, y_true, length = X_batch.to(device), y_batch.to(device), \
             y_true.to(device), length.to(device)
-        krig_coeff_reg = model_GP.krig_coeff(X_batch)
+        X_batch_sd = torch.std(X_batch, dim=-1, keepdim=True)
+        jitter = torch.randn_like(X_batch) * X_batch_sd * jitter_ratio
+        X_batch_jittered = X_batch + jitter
+        krig_coeff_true_jitter = model_GP.krig_coeff(X_batch_jittered)
+        X_batch_trans_jitter = input_transform(X_batch_jittered, None, length, type=input_trans_type)
+        X_batch_trans_jitter = X_batch_trans_jitter[:, :-1, :]
         X_batch_trans = input_transform(X_batch, None, length, type=input_trans_type)
         X_batch_trans = X_batch_trans[:, :-1, :]
         y_batch = y_batch[:, :-1, :]
     # predict mean and stderr
     optimizer.zero_grad()
     krig_coeff = model_krig_coeff(X_batch_trans)
+    krig_coeff_reg = model_krig_coeff(X_batch_trans_jitter)
     y_pred = torch.sum(krig_coeff * y_batch, dim=1)
     y_stderr_inv = torch.exp(model_cond_sd_inv(X_batch_trans))
-    penalty = penalty_multiplier * loss_MSE(krig_coeff_reg, krig_coeff)
+    penalty = penalty_multiplier * loss_MSE(krig_coeff_reg, krig_coeff_true_jitter)
     loss_inference = loss_function(y_pred, y_true, stderr_inv=y_stderr_inv)
     loss = loss_inference + penalty
     loss.backward()
