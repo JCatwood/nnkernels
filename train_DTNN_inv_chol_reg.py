@@ -63,7 +63,7 @@ if torch.cuda.is_available():
     size_rho = [128, 128, 128, 128, 1]
     n_batch = 2048
     n_epoch = 30001
-    n_epoch_GP = 4001
+    n_epoch_GP = 10001
 else:
     print("GPU is not available. Using CPU.")
     device = torch.device('cpu')
