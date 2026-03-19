@@ -154,6 +154,7 @@ with torch.no_grad():
             "m": m,
             "NLL": loss_NLL_val.item(),
             "MSE": loss_MSE_val.item(),
+            "n_replicates": n_replicates,
         }
     output_str = json.dumps(output_dict)
     print(output_str)
