@@ -151,6 +151,7 @@ optimizer = torch.optim.Adam(
 )
 scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda)
 model_krig_coeff.train()
+model_cond_sd_inv.train()
 timer = time.perf_counter()
 for epoch in range(n_epoch):
     with torch.no_grad():
@@ -159,13 +160,17 @@ for epoch in range(n_epoch):
         X_batch_sd = torch.std(X_batch, dim=-1, keepdim=True)
         jitter = torch.randn_like(X_batch) * X_batch_sd * jitter_ratio
         X_batch_jittered = X_batch + jitter
-        krig_coeff_true_jitter = model_GP.krig_coeff(X_batch_jittered)
+        y_batch_reg = model_GP.sample(X_batch_jittered)
+        y_true_reg = y_batch_reg[:, -1, :].clone()
         X_batch_trans_jitter = input_transform(X_batch_jittered, None, length, type=input_trans_type)
         X_batch_trans_jitter = X_batch_trans_jitter[:, :-1, :]
+        y_batch_reg = y_batch_reg[:, :-1, :]
     # predict mean and stderr
     optimizer.zero_grad()
     krig_coeff = model_krig_coeff(X_batch_trans_jitter)
-    loss = loss_MSE(krig_coeff, krig_coeff_true_jitter)
+    y_pred = torch.sum(krig_coeff * y_batch_reg, dim=1)
+    y_stderr_inv = torch.exp(model_cond_sd_inv(X_batch_trans_jitter))
+    loss = loss_function(y_pred, y_true_reg, stderr_inv=y_stderr_inv)
     loss.backward()
     optimizer.step()
     scheduler.step()
@@ -175,7 +180,7 @@ for epoch in range(n_epoch):
         print(f"Elapsed time: {timer - timer_prev} seconds", flush=True)
         crt_lr = optimizer.param_groups[0]["lr"]
         print(f"Current LR: {crt_lr}", flush=True)
-        print(f"MSE of kriging coeff after {epoch} iterations is {loss.detach().item()}", flush=True)
+        print(f"Loss of neural Bayes after {epoch} iterations is {loss.detach().item()}", flush=True)
 # %% NN models training
 model_GP.to(device)
 optimizer = torch.optim.Adam(
@@ -193,9 +198,11 @@ for epoch in range(n_epoch):
         X_batch_sd = torch.std(X_batch, dim=-1, keepdim=True)
         jitter = torch.randn_like(X_batch) * X_batch_sd * jitter_ratio
         X_batch_jittered = X_batch + jitter
-        krig_coeff_true_jitter = model_GP.krig_coeff(X_batch_jittered)
+        y_batch_reg = model_GP.sample(X_batch_jittered)
+        y_true_reg = y_batch_reg[:, -1, :].clone()
         X_batch_trans_jitter = input_transform(X_batch_jittered, None, length, type=input_trans_type)
         X_batch_trans_jitter = X_batch_trans_jitter[:, :-1, :]
+        y_batch_reg = y_batch_reg[:, :-1, :]
         X_batch_trans = input_transform(X_batch, None, length, type=input_trans_type)
         X_batch_trans = X_batch_trans[:, :-1, :]
         y_batch = y_batch[:, :-1, :]
@@ -204,10 +211,12 @@ for epoch in range(n_epoch):
     krig_coeff = model_krig_coeff(X_batch_trans)
     krig_coeff_reg = model_krig_coeff(X_batch_trans_jitter)
     y_pred = torch.sum(krig_coeff * y_batch, dim=1)
+    y_pred_reg = torch.sum(krig_coeff_reg * y_batch_reg, dim=1)
     y_stderr_inv = torch.exp(model_cond_sd_inv(X_batch_trans))
-    penalty = penalty_multiplier * loss_MSE(krig_coeff_reg, krig_coeff_true_jitter)
+    y_stderr_inv_reg = torch.exp(model_cond_sd_inv(X_batch_trans_jitter))
     loss_inference = loss_function(y_pred, y_true, stderr_inv=y_stderr_inv)
-    loss = loss_inference + penalty
+    loss_reg = loss_function(y_pred_reg, y_true_reg, stderr_inv=y_stderr_inv_reg)
+    loss = loss_inference + loss_reg
     loss.backward()
     optimizer.step()
     scheduler.step()

@@ -155,6 +155,15 @@ class GPVecchia(torch.nn.Module):
             (covmat_inv[:, -1:, -1:] ** 0.5) # [N, m+1, 1]
         coeff = - invchol_lastcol[:, :-1, :] / invchol_lastcol[:, -1:, :] # [N, m, 1]
         return coeff
+    
+    def sample(self, locs_batch):
+        N = locs_batch.size(0)
+        m = locs_batch.size(1) - 1
+        covmat = self.kernel(locs_batch)
+        L = torch.linalg.cholesky(covmat) # [N, m+1, m+1]
+        z = torch.randn([N, m+1, 1], dtype=locs_batch.dtype, device=locs_batch.device)
+        return L @ z # [N, m+1, 1]
+
 
 class MyNSKernel_Scale(gpytorch.kernels.MaternKernel):
     """
