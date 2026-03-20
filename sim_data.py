@@ -72,7 +72,7 @@ if __name__ == "__main__":
     mean_obj_mean0 = ZeroMean()
     mean_obj_Paraboloid = ParaboloidMean()
     kernel_Matern = MyMaternKernel(1.0, 0.03, 1.5, 0.01)
-    kernel_NS_scale = MyNSKernel_Scale(0.0, 2., -2., 0.03, 0.5, 0.01)
+    kernel_NS_scale = MyNSKernel_Scale(0.0, 1., -1., 0.03, 0.5, 0.01)
     kernel_NS_lengthrange = MyNSKernel_Lengthscale(-4., 4., -4., 1.0, 0.01)
     kernel_and_name = zip([kernel_Matern, kernel_NS_scale, kernel_NS_lengthrange], 
                           ["Matern", "NS_scale", "NS_range"])
