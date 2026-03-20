@@ -186,11 +186,11 @@ class MyNSKernel_Scale(gpytorch.kernels.MaternKernel):
             x1_view = x1
             x2_view = x2
         sigma_x1 = torch.exp(self.beta0 + \
-            self.beta1 * torch.sin(torch.sum(x1_view, dim=-1) * torch.pi * 3) + \
-            self.beta2 * torch.cos(torch.sum(x1_view, dim=-1) * torch.pi * 2))
+            torch.sin(torch.sum(x1_view, dim=-1) * torch.pi * self.beta1) + \
+            torch.cos(torch.sum(x1_view, dim=-1) * torch.pi * self.beta2))
         sigma_x2 = torch.exp(self.beta0 + \
-            self.beta1 * torch.sin(torch.sum(x2_view, dim=-1) * torch.pi * 3) + \
-            self.beta2 * torch.cos(torch.sum(x2_view, dim=-1) * torch.pi * 2))
+            torch.sin(torch.sum(x2_view, dim=-1) * torch.pi * self.beta1) + \
+            torch.cos(torch.sum(x2_view, dim=-1) * torch.pi * self.beta2))
         covmat_parent = super().forward(x1_view, x2_view, **params)
         covmat_scaled = covmat_parent * sigma_x1.unsqueeze(-1) * sigma_x2.unsqueeze(1)
         n = covmat_scaled.shape[-1]
