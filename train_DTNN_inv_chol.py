@@ -14,7 +14,7 @@ d = 2  # locs are sampled from R^d, only used when train_type is "simulation"
 m = 30
 input_trans_type = "dist_direction_lastloc"
 nfeatures = input_transformed_dim(d, input_trans_type)
-dropout_ratio = 0.25
+dropout_ratio = 0.0
 if len(sys.argv) > 3:
     train_type = sys.argv[1]
     assert train_type in ("data", "simulation"), "Invalid train_type (first) argument"
@@ -134,6 +134,8 @@ for epoch in range(n_epoch):
 # %% evaluate
 model_krig_coeff.to("cpu")
 model_cond_sd_inv.to("cpu")
+model_krig_coeff.eval()
+model_cond_sd_inv.eval()
 loss_MSE = torch.nn.MSELoss()
 loss_NLL = NllLoss()
 with torch.no_grad():
