@@ -168,7 +168,7 @@ class GPVecchia(torch.nn.Module):
 class MyNSKernel_Scale(gpytorch.kernels.MaternKernel):
     """
     MyMaternKernel kernel with varying scale: 
-    scale = exp(beta0 + beta1 * sin(sum(x, dim=-1) * 3pi) + beta2 * cos(sum(x, dim=-1) * 2pi))
+    scale = exp(beta0 + sin(sum(x, dim=-1) * beta1 * pi) + cos(sum(x, dim=-1) * beta2 * pi))
     """
     def __init__(self, beta0, beta1, beta2, lengthscale, nu, nugget, **kwargs):
         super().__init__(nu, **kwargs)
