@@ -82,7 +82,7 @@ class PermPreserveClass(torch.nn.Module):
         phi_sum = torch.sum(phi, dim=-2, keepdim=True) # [*, 1, d_phi]
         phi_one2n = phi_sum - phi # [*, m, d_phi]
         rho2 = self.rho2(phi_one2n) # [*, m, d_rho2]
-        rho1_input = torch.cat((X, rho2), dim=-1) # [*, m, d + d_rho2]
+        rho1_input = torch.cat((phi, rho2), dim=-1) # [*, m, d_phi + d_rho2]
         rho1 = self.rho1(rho1_input) # [*, m, d_rho1]
         return rho1
 
