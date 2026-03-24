@@ -2,46 +2,32 @@ import torch
 from torch import nn
 import gpytorch
 
+def _build_block(sizes, dropout=0.0):
+    layers = []
+    for i in range(len(sizes) - 1):
+        layers.append(nn.Linear(sizes[i], sizes[i + 1]))
+        # Apply activation and norm to everything EXCEPT the final projection
+        if i < len(sizes) - 2:
+            layers.append(nn.LayerNorm(sizes[i + 1]))
+            layers.append(nn.GELU())
+            if dropout > 0.0:
+                layers.append(nn.Dropout(dropout))
+    return nn.Sequential(*layers)
+
 class PermInvarClass(torch.nn.Module):
     """
-    Given a tensor of dim [*, n, d], representing batches of n locs embeded in R^d, 
-    if output == 'scalar'
-    the forward propogation first transforms each d-dimensional coordinate vector (last dimension), then aggregate (sum) across the n locs (2nd last dimension), finally pass the previous result though another NN to predict the target
-    otherwise
-    the aggregated vector across n locs is concatenated with each of the transformed vector and pass through another NN as different batches. The output will be of shape [*, n, 1], with correspondence to the input
+    TBD
     """
-    def __init__(self, NNDT_size_seq, NNTG_size_seq, dropout=0.0, concat_input=False):
+    def __init__(self, NNDT_size_seq, NNTG_size_seq, dropout=0.0):
         super().__init__()
-        layers = []
-        for i in range(len(NNDT_size_seq) - 1):
-            layers.append(nn.Linear(NNDT_size_seq[i], NNDT_size_seq[i + 1]))
-            if i < len(NNDT_size_seq) -  2:
-                layers.append(nn.ReLU())
-        if dropout > 0.0:
-            layers.append(torch.nn.Dropout(p=dropout))
-        self.DT = nn.Sequential(*layers)
-
-        layers = []
-        for i in range(len(NNTG_size_seq) - 1):
-            layers.append(nn.Linear(NNTG_size_seq[i], NNTG_size_seq[i + 1]))
-            if i < len(NNTG_size_seq) -  2:
-                layers.append(nn.ReLU())
-        self.TG = nn.Sequential(*layers)
-
-        self.concat_input = concat_input
-        if concat_input:
-            assert NNDT_size_seq[-1] + NNDT_size_seq[-1] == NNTG_size_seq[0], "size mismatch between DT output and TG input when concat_input is True"
+        self.DT = _build_block(NNDT_size_seq, dropout)
+        self.TG = _build_block(NNTG_size_seq, dropout)
 
     
     def forward(self, X, *args, **kwargs):
         X_after_DT = self.DT(X)
-        if self.concat_input:
-            X_after_sum = torch.sum(X_after_DT, dim=-2, keepdim=True).expand(-1, X.size(-2), -1)
-            X_after_cat = torch.cat((X_after_sum, X_after_DT), dim=-1)
-            target = self.TG(X_after_cat)
-        else:
-            X_after_sum = torch.sum(X_after_DT, dim=-2)
-            target = self.TG(X_after_sum)
+        X_after_sum = torch.sum(X_after_DT, dim=-2)
+        target = self.TG(X_after_sum)
         return target
 
 class PermPreserveClass(torch.nn.Module):
@@ -50,28 +36,9 @@ class PermPreserveClass(torch.nn.Module):
     """
     def __init__(self, phi_sz_seq, rho1_sz_seq, rho2_sz_seq, dropout=0.0, *args, **kwargs):
         super().__init__()
-        layers = []
-        for i in range(len(phi_sz_seq) - 1):
-            layers.append(nn.Linear(phi_sz_seq[i], phi_sz_seq[i + 1]))
-            if i < len(phi_sz_seq) -  2:
-                layers.append(nn.ReLU())
-        if dropout > 0.0:
-            layers.append(torch.nn.Dropout(p=dropout))
-        self.phi = nn.Sequential(*layers)
-
-        layers = []
-        for i in range(len(rho1_sz_seq) - 1):
-            layers.append(nn.Linear(rho1_sz_seq[i], rho1_sz_seq[i + 1]))
-            if i < len(rho1_sz_seq) -  2:
-                layers.append(nn.ReLU())
-        self.rho1 = nn.Sequential(*layers)
-
-        layers = []
-        for i in range(len(rho2_sz_seq) - 1):
-            layers.append(nn.Linear(rho2_sz_seq[i], rho2_sz_seq[i + 1]))
-            if i < len(rho2_sz_seq) -  2:
-                layers.append(nn.ReLU())
-        self.rho2 = nn.Sequential(*layers)
+        self.phi = _build_block(phi_sz_seq, dropout)
+        self.rho2 = _build_block(rho2_sz_seq, dropout)
+        self.rho1 = _build_block(rho1_sz_seq, dropout)
 
     
     def forward(self, X, *args, **kwargs):

@@ -14,7 +14,7 @@ d = 2  # locs are sampled from R^d, only used when train_type is "simulation"
 m = 30
 input_trans_type = "dist_direction_lastloc"
 nfeatures = input_transformed_dim(d, input_trans_type)
-dropout_ratio = 0.25
+dropout_ratio = 0.0
 if len(sys.argv) > 3:
     train_type = sys.argv[1]
     assert train_type in ("data", "simulation"), "Invalid train_type (first) argument"
@@ -53,7 +53,7 @@ else:
 if torch.cuda.is_available():
     device = torch.device('cuda')
     print(f"GPU is available. Using device: {torch.cuda.get_device_name(0)}")
-    latent_dim = 32
+    latent_dim = 64
     size_phi = [nfeatures, 128, 128, 128, 128, latent_dim]
     size_rho2 = [latent_dim, 128, 128, 128, 128, latent_dim]
     size_rho1 = [latent_dim + latent_dim, 128, 128, 128, 128, 1]
@@ -63,7 +63,7 @@ if torch.cuda.is_available():
 else:
     print("GPU is not available. Using CPU.")
     device = torch.device('cpu')
-    latent_dim = 16
+    latent_dim = 32
     size_phi = [nfeatures, 64, 64, 64, latent_dim]
     size_rho2 = [latent_dim, 64, 64, 64, latent_dim]
     size_rho1 = [latent_dim + latent_dim, 64, 64, 64, 1]
@@ -90,10 +90,10 @@ else:
 # %% initialize model
 if train_type == "data":
     model_krig_coeff = PermPreserveClass(size_phi, size_rho1, size_rho2, dropout=dropout_ratio)
-    model_cond_sd_inv = PermInvarClass(size_phi, size_rho, dropout=dropout_ratio, concat_input=False)
+    model_cond_sd_inv = PermInvarClass(size_phi, size_rho, dropout=dropout_ratio)
 else:
     model_krig_coeff = PermPreserveClass(size_phi, size_rho1, size_rho2)
-    model_cond_sd_inv = PermInvarClass(size_phi, size_rho, concat_input=False)
+    model_cond_sd_inv = PermInvarClass(size_phi, size_rho)
 model_krig_coeff.to(device)
 model_cond_sd_inv.to(device)
 # %% scheduler
