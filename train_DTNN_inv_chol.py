@@ -96,17 +96,10 @@ else:
     model_cond_sd_inv = PermInvarClass(size_phi, size_rho)
 model_krig_coeff.to(device)
 model_cond_sd_inv.to(device)
-# %% scheduler
-def lr_lambda(epoch):
-    base_lr = 0.001
-    factor = 0.0002
-    return base_lr / (1 + factor * epoch)
-    # return 0.001
 # %% model training
-optimizer = torch.optim.Adam(
-    list(model_krig_coeff.parameters()) + list(model_cond_sd_inv.parameters()), lr=1
+optimizer = torch.optim.AdamW(
+    list(model_krig_coeff.parameters()) + list(model_cond_sd_inv.parameters()), lr=1e-3, weight_decay=1e-4
 )
-scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda)
 model_krig_coeff.train()
 model_cond_sd_inv.train()
 timer = time.perf_counter()
@@ -125,7 +118,6 @@ for epoch in range(n_epoch):
     loss = loss_function(y_pred, y_true, stderr_inv=y_stderr_inv)
     loss.backward()
     optimizer.step()
-    scheduler.step()
     if epoch % 1000 == 0:
         timer_prev = timer
         timer = time.perf_counter()

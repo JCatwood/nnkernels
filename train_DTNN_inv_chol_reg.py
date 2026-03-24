@@ -95,18 +95,11 @@ else:
     raise Exception("Unexpected train_type")
 # %% initialize GP model as regularizer
 model_GP = GPVecchia(MyMaternKernel, *[0.5, 0.1, 1.5, 0.01])
-# %% scheduler
-def lr_lambda(epoch):
-    base_lr = 0.001
-    factor = 0.0001
-    return base_lr / (1 + factor * epoch)
-    # return 0.001
 # %% loss func
 loss_function = NllLoss()
 loss_MSE = torch.nn.MSELoss()
 # %% GP training
-optimizer = torch.optim.Adam(model_GP.parameters(), lr=1)
-scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda)
+optimizer = torch.optim.AdamW(model_GP.parameters(), lr=1e-3, weight_decay=1e-4)
 model_GP.to(device)
 model_GP.train()
 timer = time.perf_counter()
@@ -120,7 +113,6 @@ for epoch in range(n_epoch_GP):
     loss = loss_function(y_pred, y_true, y_stderr)
     loss.backward()
     optimizer.step()
-    scheduler.step()
     if epoch % 1000 == 0:
         timer_prev = timer
         timer = time.perf_counter()
@@ -147,10 +139,9 @@ dataloader_GP_reg = Vecc_Dataloader_GP_sim(
 dataloader_GP_reg.kernel.load_state_dict(model_GP.kernel.state_dict())
 # %% NN initial training with regularization from the trained GP model
 model_GP.to(device)
-optimizer = torch.optim.Adam(
-    list(model_krig_coeff.parameters()), lr=1
+optimizer = torch.optim.AdamW(
+    list(model_krig_coeff.parameters()), lr=1e-3, weight_decay=1e-4
 )
-scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda)
 model_krig_coeff.train()
 model_cond_sd_inv.train()
 timer = time.perf_counter()
@@ -174,7 +165,6 @@ for epoch in range(n_epoch):
     loss = loss_function(y_pred, y_true_reg, stderr_inv=y_stderr_inv)
     loss.backward()
     optimizer.step()
-    scheduler.step()
     if epoch % 1000 == 0:
         timer_prev = timer
         timer = time.perf_counter()
@@ -184,10 +174,9 @@ for epoch in range(n_epoch):
         print(f"Loss of neural Bayes after {epoch} iterations is {loss.detach().item()}", flush=True)
 # %% NN models training
 model_GP.to(device)
-optimizer = torch.optim.Adam(
-    list(model_krig_coeff.parameters()) + list(model_cond_sd_inv.parameters()), lr=1
+optimizer = torch.optim.AdamW(
+    list(model_krig_coeff.parameters()) + list(model_cond_sd_inv.parameters()), lr=1e-3, weight_decay=1e-4
 )
-scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda)
 model_krig_coeff.train()
 model_cond_sd_inv.train()
 timer = time.perf_counter()
@@ -220,7 +209,6 @@ for epoch in range(n_epoch):
     loss = loss_inference + loss_reg
     loss.backward()
     optimizer.step()
-    scheduler.step()
     if epoch % 1000 == 0:
         timer_prev = timer
         timer = time.perf_counter()
