@@ -22,7 +22,7 @@ m = 30
 input_trans_type = "dist_direction_lastloc"
 nfeatures = input_transformed_dim(d, input_trans_type)
 penalty_multiplier = float(m)
-dropout_ratio = 0.0
+dropout_ratio = 0.2
 jitter_ratio = 0.1
 if len(sys.argv) > 3:
     train_type = sys.argv[1]

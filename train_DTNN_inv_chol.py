@@ -14,7 +14,7 @@ d = 2  # locs are sampled from R^d, only used when train_type is "simulation"
 m = 30
 input_trans_type = "dist_direction_lastloc"
 nfeatures = input_transformed_dim(d, input_trans_type)
-dropout_ratio = 0.0
+dropout_ratio = 0.2
 if len(sys.argv) > 3:
     train_type = sys.argv[1]
     assert train_type in ("data", "simulation"), "Invalid train_type (first) argument"
