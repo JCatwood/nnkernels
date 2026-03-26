@@ -135,7 +135,7 @@ class GPVecchia(torch.nn.Module):
 class MyNSKernel_Scale(gpytorch.kernels.MaternKernel):
     """
     MyMaternKernel kernel with varying scale: 
-    scale = exp(beta0 + sin(sum(x, dim=-1) * beta1 * pi) + cos(sum(x, dim=-1) * beta2 * pi))
+    scale = exp(beta0 + sin(x[..., 0] * beta1 * pi) + cos(x[..., 1] * beta2 * pi))
     """
     def __init__(self, beta0, beta1, beta2, lengthscale, nu, nugget, **kwargs):
         super().__init__(nu, **kwargs)
@@ -153,11 +153,11 @@ class MyNSKernel_Scale(gpytorch.kernels.MaternKernel):
             x1_view = x1
             x2_view = x2
         sigma_x1 = torch.exp(self.beta0 + \
-            torch.sin(torch.sum(x1_view, dim=-1) * torch.pi * self.beta1) + \
-            torch.cos(torch.sum(x1_view, dim=-1) * torch.pi * self.beta2))
+            2.0 * torch.sin(torch.sum(x1_view, dim=-1) * torch.pi * self.beta1) + \
+            2.0 * torch.cos(torch.sum(x1_view, dim=-1) * torch.pi * self.beta2))
         sigma_x2 = torch.exp(self.beta0 + \
-            torch.sin(torch.sum(x2_view, dim=-1) * torch.pi * self.beta1) + \
-            torch.cos(torch.sum(x2_view, dim=-1) * torch.pi * self.beta2))
+            2.0 * torch.sin(torch.sum(x2_view, dim=-1) * torch.pi * self.beta1) + \
+            2.0 * torch.cos(torch.sum(x2_view, dim=-1) * torch.pi * self.beta2))
         covmat_parent = super().forward(x1_view, x2_view, **params)
         covmat_scaled = covmat_parent * sigma_x1.unsqueeze(-1) * sigma_x2.unsqueeze(1)
         n = covmat_scaled.shape[-1]
