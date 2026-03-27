@@ -2,13 +2,14 @@ import torch
 from torch import nn
 import gpytorch
 
-def _build_block(sizes, dropout=0.0):
+def _build_block(sizes, dropout=0.0, normalize=True):
     layers = []
     for i in range(len(sizes) - 1):
         layers.append(nn.Linear(sizes[i], sizes[i + 1]))
         # Apply activation and norm to everything EXCEPT the final projection
         if i < len(sizes) - 2:
-            layers.append(nn.LayerNorm(sizes[i + 1]))
+            if normalize:
+                layers.append(nn.LayerNorm(sizes[i + 1]))
             layers.append(nn.GELU())
             if dropout > 0.0:
                 layers.append(nn.Dropout(dropout))
@@ -20,8 +21,8 @@ class PermInvarClass(torch.nn.Module):
     """
     def __init__(self, NNDT_size_seq, NNTG_size_seq, dropout=0.0):
         super().__init__()
-        self.DT = _build_block(NNDT_size_seq, dropout)
-        self.TG = _build_block(NNTG_size_seq, dropout)
+        self.DT = _build_block(NNDT_size_seq, dropout, normalize=False)
+        self.TG = _build_block(NNTG_size_seq, dropout, normalize=True)
 
     
     def forward(self, X, *args, **kwargs):
@@ -36,9 +37,9 @@ class PermPreserveClass(torch.nn.Module):
     """
     def __init__(self, phi_sz_seq, rho1_sz_seq, rho2_sz_seq, dropout=0.0, *args, **kwargs):
         super().__init__()
-        self.phi = _build_block(phi_sz_seq, dropout)
-        self.rho2 = _build_block(rho2_sz_seq, dropout)
-        self.rho1 = _build_block(rho1_sz_seq, dropout)
+        self.phi = _build_block(phi_sz_seq, dropout, normalize=False)
+        self.rho2 = _build_block(rho2_sz_seq, dropout, normalize=True)
+        self.rho1 = _build_block(rho1_sz_seq, dropout, normalize=True)
 
     
     def forward(self, X, *args, **kwargs):
