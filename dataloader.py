@@ -156,7 +156,7 @@ class Vecc_Dataloader_Dataset:
             ind = torch.argsort(torch.rand(self.offset_test[-1]))[:size]
         ind = ind.unsqueeze(-1) # [size, 1]
         if self.NN_test is None or self.NN_test.size(1) < m:
-            self.update_NN_scale(m=m)
+            self.update_NN(m=m)
         X_test = self.X_test[ind, :] # [size, 1, d]
         y_test = self.y_test[ind, :] # [size, 1, 1]
         ind = ind.squeeze() # [size,]
