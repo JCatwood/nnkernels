@@ -54,12 +54,12 @@ if torch.cuda.is_available():
     device = torch.device('cuda')
     print(f"GPU is available. Using device: {torch.cuda.get_device_name(0)}")
     latent_dim = 64
-    size_phi = [nfeatures, 128, 128, 128, 128, latent_dim]
-    size_rho2 = [latent_dim, 128, 128, 128, 128, latent_dim]
-    size_rho1 = [latent_dim + latent_dim, 128, 128, 128, 128, 1]
+    size_phi = [nfeatures, 128, 128, 128, latent_dim]
+    size_rho2 = [latent_dim, 128, 128, 128, latent_dim]
+    size_rho1 = [latent_dim + latent_dim, 128, 128, 128, 1]
     size_rho = [latent_dim, 128, 128, 128, 1]
     n_batch = 2048
-    n_epoch = 30001
+    n_epoch = 60001
 else:
     print("GPU is not available. Using CPU.")
     device = torch.device('cpu')
