@@ -63,7 +63,7 @@ if train_type == "simulation":
         kernel_parms_init = [1.0, 0.3, 1.5, 0.01]
         KernelClass = MyMaternKernel
     elif kernel_gen_name == "MyNSKernel_Scale":
-        kernel_parms_init = [0.0, 4., -2., 0.3, 0.5, 0.01]
+        kernel_parms_init = [1.0, 2.0, 3.0, 0.03, 0.5, 0.01]
         KernelClass = MyNSKernel_Scale
     elif kernel_gen_name == "MyNSKernel_Lengthscale":
         kernel_parms_init = [-2., 1., -1., 1.0, 0.01]
@@ -78,7 +78,7 @@ if kernel_train_name == "MyMaternKernel":
     kernel_parms_init = [0.5, 0.1, 1.5, 0.01]
     KernelClass = MyMaternKernel
 elif kernel_train_name == "MyNSKernel_Scale":
-    kernel_parms_init = [0.0, 0.5, -0.5, 0.03, 0.5, 0.01]
+    kernel_parms_init = [1.0, 2.0, 3.0, 0.03, 0.5, 0.01]
     KernelClass = MyNSKernel_Scale
 elif kernel_train_name == "MyNSKernel_Lengthscale":
     kernel_parms_init = [1.6, 0.75, -0.75, 0.3, 0.5, 0.01]
