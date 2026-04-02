@@ -1,6 +1,7 @@
 import torch
 from torch import nn
 import gpytorch
+from gpytorch.constraints import Positive
 
 def _build_block(sizes, dropout=0.0, normalize=True):
     layers = []
@@ -236,3 +237,74 @@ class MyNSKernel_Lengthscale(torch.nn.Module):
 
     def __call__(self, x, **params):
         return self.forward(x, **params)
+    
+class MyNSKernel_Kron(gpytorch.kernels.Kernel):
+    """
+    Separable kernel K = K1 \\kron K2 ... Kd ... with varying scale: 
+    scale = exp(beta0 + beta1 * x[..., 0] + beta2 * x[..., 0]**2)
+    K1, K2, ... are the same
+    """
+    def __init__(self, beta0, beta1, beta2, lengthscale, nu, nugget, **kwargs):
+        super().__init__(**kwargs)
+        
+        # Use constraints instead of assertions
+        self.register_parameter(name="raw_beta0", parameter=torch.nn.Parameter(torch.tensor(beta0)))
+        self.register_parameter(name="raw_beta1", parameter=torch.nn.Parameter(torch.tensor(beta1)))
+        self.register_parameter(name="raw_beta2", parameter=torch.nn.Parameter(torch.tensor(beta2)))
+        self.register_constraint("raw_beta0", Positive())
+        self.register_constraint("raw_beta1", Positive())
+        self.register_constraint("raw_beta2", Positive())
+
+        # The base stationary kernel
+        # We use a MaternKernel with a lengthscale
+        self.base_kernel = gpytorch.kernels.MaternKernel(nu=nu)
+        self.base_kernel.lengthscale = lengthscale
+        
+        # Nugget/Noise constraint
+        self.register_parameter(name="raw_nugget", parameter=torch.nn.Parameter(torch.log(torch.tensor(nugget))))
+
+    @property
+    def beta0(self): return self.raw_beta0_constraint.transform(self.raw_beta0)
+    @property
+    def beta1(self): return self.raw_beta1_constraint.transform(self.raw_beta1)
+    @property
+    def beta2(self): return self.raw_beta2_constraint.transform(self.raw_beta2)
+    @property
+    def nugget(self): return torch.exp(self.raw_nugget)
+
+    def forward(self, x1, x2, diag=False, **params):
+        is_symmetric = (x1 is x2)
+        
+        # 1. Compute the Stationary Kronecker Product
+        res = None
+        for d in range(x1.size(-1)):
+            # Explicitly pass x2 to the base kernel
+            k_part = self.base_kernel(x1[..., d:d+1], x2[..., d:d+1])
+            res = k_part if res is None else res * k_part
+        res_evaluated = res.to_dense()
+
+        # 2. Compute Non-Stationary Scaling sigma(x)
+        def get_scale(x):
+            v = x[..., 0]
+            return torch.exp(self.beta0 + self.beta1 * v + self.beta2 * (v ** 2))
+
+        sigma_x1 = get_scale(x1) # [B, n]
+        sigma_x2 = get_scale(x2) # [B, n]
+
+        # 3. Apply Scaling
+        if diag:
+            # Diagonals are always returned as Tensors
+            out = sigma_x1 * res_evaluated.diagonal(dim1=-2, dim2=-1) * sigma_x2
+            if is_symmetric:
+                out = out + self.nugget
+            return out
+        
+        # Apply row/column scaling and then force evaluation to dense Tensor
+        res_evaluated_scaled = sigma_x1.unsqueeze(-1) * res_evaluated * sigma_x2.unsqueeze(-2)
+        
+        # 4. Add Nugget (jitter) only if symmetric (training/self-covariance)
+        if is_symmetric:
+            n = x1.size(-2)
+            res_evaluated_scaled = res_evaluated_scaled + torch.eye(n, device=x1.device) * self.nugget
+             
+        return res_evaluated_scaled
