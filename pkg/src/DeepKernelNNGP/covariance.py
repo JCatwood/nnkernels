@@ -85,10 +85,9 @@ class MyMaternKernel(torch.nn.Module):
 class MyNSKernel_Scale(torch.nn.Module):
     """
     MyMaternKernel kernel with varying scale: 
-    scale = exp(beta0 + beta1 * x[..., 0] + beta2 * x[..., 1]**2)
+    scale = exp(beta0 + beta1 * x[..., 0] + beta2 * x[..., 0]**2)
     """
     def __init__(self, beta0, beta1, beta2, lengthscale, nu, nugget, **kwargs):
-        assert beta0 >= 0. and beta1 >= 0. and beta2 >= 0.
         super().__init__()
         self.gpt_matern = gpytorch.kernels.MaternKernel(nu=nu)
         self.gpt_matern.lengthscale = lengthscale
@@ -108,10 +107,10 @@ class MyNSKernel_Scale(torch.nn.Module):
             x2_view = x
         sigma_x1 = torch.exp(self.beta0 + \
             self.beta1 * x1_view[..., 0] + \
-            self.beta2 * x1_view[..., 1]**2)
+            self.beta2 * x1_view[..., 0]**2)
         sigma_x2 = torch.exp(self.beta0 + \
             self.beta1 * x2_view[..., 0] + \
-            self.beta2 * x2_view[..., 1]**2)
+            self.beta2 * x2_view[..., 0]**2)
         covmat_parent = self.gpt_matern(x1_view, x2_view, **params)
         covmat_parent = covmat_parent.to_dense() if hasattr(covmat_parent, "to_dense") else covmat_parent
         covmat_scaled = covmat_parent * sigma_x1.unsqueeze(-1) * sigma_x2.unsqueeze(1)

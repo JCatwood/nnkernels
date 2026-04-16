@@ -39,7 +39,7 @@ if train_type == "simulation":
     if kernel_gen_name == "MyMaternKernel":
         kernel_gen_init = [1.0, [0.3 for _ in range(d)], 1.5, 0.01]
     elif kernel_gen_name == "MyNSKernel_Scale":
-        kernel_gen_init = [0.25, -1.0, 0.25, 0.03, 0.5, 0.01]
+        kernel_gen_init = [1.0, -4.0, 4.0, 0.1, 0.5, 0.01]
     elif kernel_gen_name == "MyNSKernel_Lengthscale":
         kernel_gen_init = [-2.0, 1.0, -1.0, 1.0, 0.01]
     else:  # MyNSKernel_Kron
@@ -97,7 +97,6 @@ for iter in range(n_iter):
         print(f"Current LR: {optimizer.param_groups[0]['lr']}", flush=True)
         print(f"Loss after {iter} iterations is {loss.detach().item()}", flush=True)
 # %% evaluate
-model.to("cpu")
 model.eval()
 loss_MSE = torch.nn.MSELoss()
 with torch.no_grad():
@@ -105,6 +104,7 @@ with torch.no_grad():
         X_batch, y_batch, y_true = dataloader.get_test_batch(size=n_batch*10, m=m)
     else:
         X_batch, y_batch, y_true = dataloader.get_test_batch(size='all', m=m)
+    X_batch, y_batch, y_true = X_batch.to(device), y_batch.to(device), y_true.to(device)
     y_pred, y_pred_stderr = model(X_batch, y_batch)
     loss_NLL_val = nll_loss(y_pred, y_true, y_pred_stderr)
     loss_MSE_val = loss_MSE(y_pred, y_true)
