@@ -85,7 +85,7 @@ class MyMaternKernel(torch.nn.Module):
 class MyNSKernel_Scale(torch.nn.Module):
     """
     MyMaternKernel kernel with varying scale: 
-    scale = exp(beta0 + beta1 * x[..., 0] + beta2 * x[..., 0]**2)
+    scale = exp(beta0 + beta1 * sum(x, dim=-1) + beta2 * sum(x, dim=-1)**2)
     """
     def __init__(self, beta0, beta1, beta2, lengthscale, nu, nugget, **kwargs):
         super().__init__()
@@ -97,25 +97,18 @@ class MyNSKernel_Scale(torch.nn.Module):
         self.raw_nugget = torch.nn.Parameter(torch.log(torch.as_tensor(nugget, dtype=torch.get_default_dtype())))
     
     def forward(self, x, **params):
-        if x.size(-1) < 2:
-            raise ValueError("MyNSKernel_Scale requires input dimension at least 2.")
         if x.dim() == 2:
-            x1_view = x.unsqueeze(0)
-            x2_view = x.unsqueeze(0)
+            x_view = x.unsqueeze(0)
         else:
-            x1_view = x
-            x2_view = x
-        sigma_x1 = torch.exp(self.beta0 + \
-            self.beta1 * x1_view[..., 0] + \
-            self.beta2 * x1_view[..., 0]**2)
-        sigma_x2 = torch.exp(self.beta0 + \
-            self.beta1 * x2_view[..., 0] + \
-            self.beta2 * x2_view[..., 0]**2)
-        covmat_parent = self.gpt_matern(x1_view, x2_view, **params)
+            x_view = x
+        sigma = torch.exp(self.beta0 + \
+            self.beta1 * torch.sum(x_view, dim=-1) + \
+            self.beta2 * torch.sum(x_view, dim=-1)**2)
+        covmat_parent = self.gpt_matern(x_view, x_view, **params)
         covmat_parent = covmat_parent.to_dense() if hasattr(covmat_parent, "to_dense") else covmat_parent
-        covmat_scaled = covmat_parent * sigma_x1.unsqueeze(-1) * sigma_x2.unsqueeze(1)
+        covmat_scaled = covmat_parent * sigma.unsqueeze(-1) * sigma.unsqueeze(1)
         n = covmat_scaled.shape[-1]
-        covmat = covmat_scaled + torch.eye(n, device=x1_view.device, dtype=x1_view.dtype) * self.nugget
+        covmat = covmat_scaled + torch.diag_embed(sigma**2 * self.nugget)
         if x.dim() == 2:
             return covmat.squeeze(0)
         else:
@@ -193,17 +186,13 @@ class MyNSKernel_Lengthscale(torch.nn.Module):
 
 class MyNSKernel_Kron(torch.nn.Module):
     """
-    Separable kernel K = K1 \\times K2 ... Kd ... with varying scale: 
-    scale = exp(beta0 + beta1 * x[..., 0] + beta2 * x[..., 0]**2)
+    Separable kernel K = K1 \\times K2 ... Kd ... 
     K1, K2, ... are the same
     """
-    def __init__(self, beta0, beta1, beta2, lengthscale, nu, nugget, **kwargs):
+    def __init__(self, lengthscale, nu, nugget, **kwargs):
         super().__init__(**kwargs)
         
         # Use constraints instead of assertions
-        self.beta0 = torch.nn.Parameter(torch.as_tensor(beta0, dtype=torch.get_default_dtype()))
-        self.beta1 = torch.nn.Parameter(torch.as_tensor(beta1, dtype=torch.get_default_dtype()))
-        self.beta2 = torch.nn.Parameter(torch.as_tensor(beta2, dtype=torch.get_default_dtype()))
         self.raw_nugget = torch.nn.Parameter(torch.log(torch.as_tensor(nugget, dtype=torch.get_default_dtype())))
 
         # The base stationary kernel
@@ -224,20 +213,9 @@ class MyNSKernel_Kron(torch.nn.Module):
             k_part = self.base_kernel(x1[..., d:d+1], x2[..., d:d+1])
             res = k_part if res is None else res * k_part
         res_evaluated = res.to_dense() if hasattr(res, "to_dense") else res
-
-        # 2. Compute Non-Stationary Scaling sigma(x)
-        def get_scale(x):
-            v = x[..., 0]
-            return torch.exp(self.beta0 + self.beta1 * v + self.beta2 * (v ** 2))
-
-        sigma_x1 = get_scale(x1) # [B, n]
-        sigma_x2 = get_scale(x2) # [B, n]
-        
-        # Apply row/column scaling and then force evaluation to dense Tensor
-        res_evaluated_scaled = sigma_x1.unsqueeze(-1) * res_evaluated * sigma_x2.unsqueeze(-2)
         
         # 4. Add Nugget (jitter)
         n = x1.size(-2)
-        res_evaluated_scaled = res_evaluated_scaled + torch.eye(n, device=x1.device, dtype=x1.dtype) * self.nugget
+        res_evaluated = res_evaluated + torch.eye(n, device=x1.device, dtype=x1.dtype) * self.nugget
              
-        return res_evaluated_scaled
+        return res_evaluated

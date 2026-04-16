@@ -39,11 +39,11 @@ if train_type == "simulation":
     if kernel_gen_name == "MyMaternKernel":
         kernel_gen_init = [1.0, [0.3 for _ in range(d)], 1.5, 0.01]
     elif kernel_gen_name == "MyNSKernel_Scale":
-        kernel_gen_init = [1.0, -4.0, 4.0, 0.1, 0.5, 0.01]
+        kernel_gen_init = [d**2/4.0, -float(d), 1, 0.1, 0.5, 0.01]
     elif kernel_gen_name == "MyNSKernel_Lengthscale":
         kernel_gen_init = [-2.0, 1.0, -1.0, 1.0, 0.01]
     else:  # MyNSKernel_Kron
-        kernel_gen_init = [0.0, -1.2, 1.2, 0.03, 0.5, 0.01]
+        kernel_gen_init = [0.3, 1.5, 0.01]
     dataloader = Vecc_Dataloader_GP_sim(KernelGen, kernel_gen_init, d, "y", device=device)
 else:
     dataloader = Vecc_Dataloader_Dataset(data_name, data_seeds)
@@ -58,7 +58,8 @@ def set_seed(seed: int) -> None:
     random.seed(seed)
     np.random.seed(seed)
     torch.manual_seed(seed)
-    torch.cuda.manual_seed_all(seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(seed)
 set_seed(123)
 
 # %% model init
@@ -72,6 +73,11 @@ else:
 
 # %% model training
 optimizer = torch.optim.AdamW(model.parameters(), lr=1e-3, weight_decay=1e-4)
+scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+    optimizer,
+    T_max=n_iter,
+    eta_min=1e-5,
+)
 model.to(device)
 model.train()
 
@@ -89,6 +95,7 @@ for iter in range(n_iter):
     loss = nll_loss(y_pred, y_true, y_pred_stderr)
     loss.backward()
     optimizer.step()
+    scheduler.step()
 
     if iter % 1000 == 0:
         timer_prev = timer
