@@ -1,7 +1,7 @@
 import torch
 import pandas
 import os
-from models import MyMaternKernel, MyNSKernel_Scale, MyNSKernel_Lengthscale, MyNSKernel_Kron
+from DeepKernelNNGP import MyMaternKernel, MyNSKernel_Scale, MyNSKernel_Lengthscale, MyNSKernel_Kron
 from scipy.stats.qmc import LatinHypercube
 
 class ZeroMean(torch.nn.Module):
@@ -71,7 +71,7 @@ if __name__ == "__main__":
     d = 2
     mean_obj_mean0 = ZeroMean()
     mean_obj_Paraboloid = ParaboloidMean()
-    kernel_Matern = MyMaternKernel(1.0, 0.03, 1.5, 0.01)
+    kernel_Matern = MyMaternKernel(1.0, [0.03] * d, 1.5, 0.01)
     kernel_NS_scale = MyNSKernel_Scale(1.0, 2.0, 3.0, 0.03, 0.5, 0.01)
     kernel_NS_lengthrange = MyNSKernel_Lengthscale(-4., 4., -4., 1.0, 0.03)
     kernel_NS_kron = MyNSKernel_Kron(0.0, -1.2, 1.2, 0.03, 0.5, 0.01)
