@@ -4,7 +4,7 @@ import DeepKernelNNGP
 def init_DeepKernelNNGP(d, dropout=0.0, device=torch.device("cpu")):
     MeanClass = DeepKernelNNGP.ConstMean
     CovClass = DeepKernelNNGP.NNKernel
-    input_trans_type = 'dist_direction_lastloc'
+    input_trans_type = 'locs_lastloc'
     nfeatures = DeepKernelNNGP.input_transformed_dim(d, input_trans_type)
     if device.type == "cuda":
         latent_dim = 64
