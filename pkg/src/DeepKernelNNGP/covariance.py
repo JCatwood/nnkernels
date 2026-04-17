@@ -249,3 +249,153 @@ class LinearKernel(torch.nn.Module):
             return covmat.squeeze(0)
         else:
             return covmat
+
+
+class PeriodicKernel(torch.nn.Module):
+    """
+    Periodic kernel
+
+        K(x_i, x_j) = scale^2 * exp(
+            -2 * sum_q sin^2(pi * (x_iq - x_jq) / period) / lengthscale
+        )
+
+    with diagonal nugget added.
+    """
+    def __init__(self, scale, period, lengthscale, nugget, **kwargs):
+        super().__init__(**kwargs)
+
+        if scale <= 0 or period <= 0 or lengthscale <= 0 or nugget <= 0:
+            raise ValueError("scale, period, lengthscale, and nugget must be positive")
+
+        self.raw_scale = torch.nn.Parameter(
+            torch.log(torch.as_tensor(scale, dtype=torch.get_default_dtype()))
+        )
+        self.raw_period = torch.nn.Parameter(
+            torch.log(torch.as_tensor(period, dtype=torch.get_default_dtype()))
+        )
+        self.raw_lengthscale = torch.nn.Parameter(
+            torch.log(torch.as_tensor(lengthscale, dtype=torch.get_default_dtype()))
+        )
+        self.raw_nugget = torch.nn.Parameter(
+            torch.log(torch.as_tensor(nugget, dtype=torch.get_default_dtype()))
+        )
+
+    @property
+    def scale(self):
+        return torch.exp(self.raw_scale)
+
+    @property
+    def period(self):
+        return torch.exp(self.raw_period)
+
+    @property
+    def lengthscale(self):
+        return torch.exp(self.raw_lengthscale)
+
+    @property
+    def nugget(self):
+        return torch.exp(self.raw_nugget)
+
+    def forward(self, x, **params):
+        if x.dim() == 2:
+            x_view = x.unsqueeze(0)
+        else:
+            x_view = x
+
+        diff = x_view.unsqueeze(-2) - x_view.unsqueeze(-3)   # [B, n, n, d]
+        sin2 = torch.sin(torch.pi * diff / self.period) ** 2
+        covmat = torch.exp(-2.0 * sin2.sum(dim=-1) / self.lengthscale) * (self.scale ** 2)
+
+        n = x_view.size(-2)
+        covmat = covmat + torch.eye(n, device=x_view.device, dtype=x_view.dtype) * self.nugget
+
+        if x.dim() == 2:
+            return covmat.squeeze(0)
+        else:
+            return covmat
+
+class TransformedMaternKernel(torch.nn.Module):
+    """
+    Isotropic Matérn kernel with a learned domain transformation.
+
+    The input coordinates are first transformed by a random matrix
+    Parameters
+    ----------
+    d : int
+        Input dimension.
+    hidden_dim : int, default=64
+        Hidden width of the domain transform network.
+    scale : float, default=1.0
+        Marginal standard deviation.
+    lengthscale : float, default=0.2
+        Isotropic lengthscale.
+    nu : float, default=1.5
+        Matérn smoothness parameter.
+    nugget : float, default=1e-3
+        Diagonal nugget.
+    """
+
+    def __init__(
+        self,
+        d: int, scale: float = 1.0, lengthscale: float = 0.1, 
+        nu: float = 1.5, nugget: float = 1e-3,
+    ):
+        super().__init__()
+
+        if scale <= 0:
+            raise ValueError("scale must be positive")
+        if lengthscale <= 0:
+            raise ValueError("lengthscale must be positive")
+        if nugget <= 0:
+            raise ValueError("nugget must be positive")
+
+        self.d = d
+        self.transformer = torch.nn.Parameter(torch.rand(d, d) * 2.0 / d)
+
+        # Use a base Matérn kernel with unit lengthscale after manual scaling
+        self.base_kernel = gpytorch.kernels.MaternKernel(nu=nu)
+        self.base_kernel.lengthscale = lengthscale
+
+        self.raw_scale = torch.nn.Parameter(
+            torch.log(torch.as_tensor(scale, dtype=torch.get_default_dtype()))
+        )
+        self.raw_nugget = torch.nn.Parameter(
+            torch.log(torch.as_tensor(nugget, dtype=torch.get_default_dtype()))
+        )
+
+    @property
+    def scale(self) -> torch.Tensor:
+        return torch.exp(self.raw_scale)
+
+    @property
+    def lengthscale(self) -> torch.Tensor:
+        return self.base_kernel.lengthscale
+
+    @property
+    def nugget(self) -> torch.Tensor:
+        return torch.exp(self.raw_nugget)
+
+    def forward(self, x: torch.Tensor, **params) -> torch.Tensor:
+        """
+        Parameters
+        ----------
+        x : torch.Tensor
+            Shape [n, d] or [B, n, d]
+
+        Returns
+        -------
+        K : torch.Tensor
+            Shape [n, n] or [B, n, n]
+        """
+        z = x @ self.transformer
+
+        K = self.base_kernel(z, z)
+        K = K.to_dense() if hasattr(K, "to_dense") else K
+
+        n = z.shape[-2]
+        eye = torch.eye(n, device=x.device, dtype=x.dtype)
+        if z.dim() == 3:
+            eye = eye.unsqueeze(0)
+
+        K = (self.scale ** 2) * K + self.nugget * eye
+        return K

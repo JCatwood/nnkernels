@@ -44,6 +44,10 @@ if train_type == "simulation":
         kernel_gen_init = [-2.0, 1.0, -1.0, 1.0, 0.01]
     elif kernel_gen_name == "LinearKernel":
         kernel_gen_init = [0.01]
+    elif kernel_gen_name == "PeriodicKernel":
+        kernel_gen_init = [1.0, 0.5, d, 0.01]
+    elif kernel_gen_name == "TransformedMaternKernel":
+        kernel_gen_init = [d, 1.0, 0.1 * (d ** 0.5), 1.5, 0.01]
     else:  # MyNSKernel_Kron
         kernel_gen_init = [0.3, 1.5, 0.01]
     dataloader = Vecc_Dataloader_GP_sim(KernelGen, kernel_gen_init, d, "y", device=device)
