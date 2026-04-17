@@ -11,6 +11,7 @@ def parse_args():
         "MyNSKernel_Scale": DeepKernelNNGP.MyNSKernel_Scale,
         "MyNSKernel_Lengthscale": DeepKernelNNGP.MyNSKernel_Lengthscale,
         "MyNSKernel_Kron": DeepKernelNNGP.MyNSKernel_Kron,
+        "LinearKernel": DeepKernelNNGP.LinearKernel
     }
 
     MEAN_MAP = {

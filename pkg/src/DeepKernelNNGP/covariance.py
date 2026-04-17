@@ -85,7 +85,7 @@ class MyMaternKernel(torch.nn.Module):
 class MyNSKernel_Scale(torch.nn.Module):
     """
     MyMaternKernel kernel with varying scale: 
-    scale = exp(beta0 + beta1 * sum(x, dim=-1) + beta2 * sum(x, dim=-1)**2)
+    scale = exp(beta0 + beta1 * x[..., -1] + beta2 * x[..., -1]**2)
     """
     def __init__(self, beta0, beta1, beta2, lengthscale, nu, nugget, **kwargs):
         super().__init__()
@@ -102,8 +102,8 @@ class MyNSKernel_Scale(torch.nn.Module):
         else:
             x_view = x
         sigma = torch.exp(self.beta0 + \
-            self.beta1 * torch.sum(x_view, dim=-1) + \
-            self.beta2 * torch.sum(x_view, dim=-1)**2)
+            self.beta1 * x_view[..., -1] + \
+            self.beta2 * x_view[..., -1]**2)
         covmat_parent = self.gpt_matern(x_view, x_view, **params)
         covmat_parent = covmat_parent.to_dense() if hasattr(covmat_parent, "to_dense") else covmat_parent
         covmat_scaled = covmat_parent * sigma.unsqueeze(-1) * sigma.unsqueeze(1)
@@ -219,3 +219,33 @@ class MyNSKernel_Kron(torch.nn.Module):
         res_evaluated = res_evaluated + torch.eye(n, device=x1.device, dtype=x1.dtype) * self.nugget
              
         return res_evaluated
+
+class LinearKernel(torch.nn.Module):
+    """
+    Linear kernel K(x_i, x_j) = x_i^T x_j, with diagonal nugget.
+    """
+    def __init__(self, nugget, **kwargs):
+        super().__init__(**kwargs)
+        self.raw_nugget = torch.nn.Parameter(
+            torch.log(torch.as_tensor(nugget, dtype=torch.get_default_dtype()))
+        )
+
+    @property
+    def nugget(self):
+        return torch.exp(self.raw_nugget)
+
+    def forward(self, x, **params):
+        if x.dim() == 2:
+            x_view = x.unsqueeze(0)
+        else:
+            x_view = x
+
+        covmat = x_view @ x_view.transpose(-1, -2)
+
+        n = x_view.size(-2)
+        covmat = covmat + torch.eye(n, device=x_view.device, dtype=x_view.dtype) * self.nugget
+
+        if x.dim() == 2:
+            return covmat.squeeze(0)
+        else:
+            return covmat
