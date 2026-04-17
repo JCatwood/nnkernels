@@ -43,7 +43,7 @@ if train_type == "simulation":
     elif kernel_gen_name == "MyNSKernel_Lengthscale":
         kernel_gen_init = [-2.0, 1.0, -1.0, 1.0, 0.01]
     elif kernel_gen_name == "LinearKernel":
-        kernel_gen_init = []
+        kernel_gen_init = [0.01]
     else:  # MyNSKernel_Kron
         kernel_gen_init = [0.3, 1.5, 0.01]
     dataloader = Vecc_Dataloader_GP_sim(KernelGen, kernel_gen_init, d, "y", device=device)
