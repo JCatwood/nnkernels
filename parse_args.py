@@ -23,7 +23,7 @@ def parse_args():
     }
     
     valid_kernels = list(COV_MAP)
-    valid_methods = ["VGP", "DeepKernelNNGP", "DeepKernelNNGP_reg"]
+    valid_methods = ["VGP", "DeepKernelNNGP", "VGP_SM", "VGP_Wilson2015Deep"]
 
     parser = argparse.ArgumentParser(description="GP variants training script")
 

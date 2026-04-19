@@ -1,5 +1,8 @@
 import torch
 import gpytorch
+from torch import nn
+import math
+from .NNkernel import _build_block
 
 class MyMaternKernel(torch.nn.Module):
     """
@@ -399,3 +402,200 @@ class TransformedMaternKernel(torch.nn.Module):
 
         K = (self.scale ** 2) * K + self.nugget * eye
         return K
+    
+class _SpectralMixtureBaseKernel(nn.Module):
+    """
+    One Wilson-Adams (2013) spectral mixture component.
+
+    k_q(x, x') = w_q * prod_p exp(-2 pi^2 (x_p - x'_p)^2 v_q^(p))
+                        * cos(2 pi (x_p - x'_p) mu_q^(p))
+
+    Parameters
+    ----------
+    weight : float
+        Positive component weight.
+    mean : array-like of shape [d]
+        Spectral mean (frequency) for each input dimension.
+    variance : array-like of shape [d]
+        Spectral variance for each input dimension.
+    """
+
+    def __init__(self, weight, mean, variance):
+        super().__init__()
+
+        mean_t = torch.as_tensor(mean, dtype=torch.get_default_dtype())
+        var_t = torch.as_tensor(variance, dtype=torch.get_default_dtype())
+
+        if mean_t.ndim != 1:
+            raise ValueError("mean must be a 1D tensor/list of shape [d]")
+        if var_t.ndim != 1:
+            raise ValueError("variance must be a 1D tensor/list of shape [d]")
+        if mean_t.shape != var_t.shape:
+            raise ValueError("mean and variance must have the same shape")
+        if weight <= 0:
+            raise ValueError("weight must be positive")
+        if torch.any(var_t <= 0):
+            raise ValueError("all variances must be positive")
+
+        self.d = mean_t.numel()
+        self.raw_weight = nn.Parameter(torch.log(torch.as_tensor(weight, dtype=torch.get_default_dtype())))
+        self.raw_mean = nn.Parameter(torch.log(mean_t.clamp_min(1e-12)))
+        self.raw_variance = nn.Parameter(torch.log(var_t))
+
+    @property
+    def weight(self):
+        return torch.exp(self.raw_weight)
+
+    @property
+    def mean(self):
+        return torch.exp(self.raw_mean)
+
+    @property
+    def variance(self):
+        return torch.exp(self.raw_variance)
+
+    def forward(self, x):
+        """
+        Parameters
+        ----------
+        x : Tensor
+            Shape [n, d] or [B, n, d]
+
+        Returns
+        -------
+        K : Tensor
+            Shape [n, n] or [B, n, n]
+        """
+        if x.shape[-1] != self.d:
+            raise ValueError(f"Expected last dimension {self.d}, got {x.shape[-1]}")
+
+        if x.dim() == 2:
+            x_view = x.unsqueeze(0)  # [1, n, d]
+            squeeze_out = True
+        elif x.dim() == 3:
+            x_view = x
+            squeeze_out = False
+        else:
+            raise ValueError("x must have shape [n, d] or [B, n, d]")
+
+        diff = x_view.unsqueeze(-2) - x_view.unsqueeze(-3)  # [B, n, n, d]
+
+        exp_term = torch.exp(
+            -2.0 * (math.pi ** 2) * (diff ** 2) * self.variance.view(1, 1, 1, self.d)
+        )
+        cos_term = torch.cos(
+            2.0 * math.pi * diff * self.mean.view(1, 1, 1, self.d)
+        )
+
+        K = self.weight * (exp_term * cos_term).prod(dim=-1)
+
+        return K.squeeze(0) if squeeze_out else K
+
+
+class SpectralMixtureKernel(nn.Module):
+    """
+    Full Wilson-Adams (2013) spectral mixture kernel:
+        k(x, x') = sum_{q=1}^Q k_q(x, x')
+
+    Parameters
+    ----------
+    weights : array-like of shape [Q]
+        Positive mixture weights.
+    means : array-like of shape [Q, d]
+        Spectral means per component and dimension.
+    variances : array-like of shape [Q, d]
+        Spectral variances per component and dimension.
+    nugget : float, default=1e-6
+        Positive diagonal nugget.
+    """
+
+    def __init__(self, weights, means, variances, nugget=1e-6):
+        super().__init__()
+
+        weights_t = torch.as_tensor(weights, dtype=torch.get_default_dtype())
+        means_t = torch.as_tensor(means, dtype=torch.get_default_dtype())
+        variances_t = torch.as_tensor(variances, dtype=torch.get_default_dtype())
+
+        if weights_t.ndim != 1:
+            raise ValueError("weights must have shape [Q]")
+        if means_t.ndim != 2:
+            raise ValueError("means must have shape [Q, d]")
+        if variances_t.ndim != 2:
+            raise ValueError("variances must have shape [Q, d]")
+        if means_t.shape != variances_t.shape:
+            raise ValueError("means and variances must have the same shape [Q, d]")
+        if means_t.shape[0] != weights_t.shape[0]:
+            raise ValueError("weights, means, and variances must agree on Q")
+        if nugget <= 0:
+            raise ValueError("nugget must be positive")
+        if torch.any(weights_t <= 0):
+            raise ValueError("all weights must be positive")
+        if torch.any(variances_t <= 0):
+            raise ValueError("all variances must be positive")
+        if torch.any(means_t < 0):
+            raise ValueError("all means must be nonnegative")
+
+        self.Q = weights_t.numel()
+        self.d = means_t.shape[1]
+        self.raw_nugget = nn.Parameter(torch.log(torch.as_tensor(nugget, dtype=torch.get_default_dtype())))
+
+        self.components = nn.ModuleList(
+            [
+                _SpectralMixtureBaseKernel(
+                    weight=weights_t[q].item(),
+                    mean=means_t[q],
+                    variance=variances_t[q],
+                )
+                for q in range(self.Q)
+            ]
+        )
+
+    @property
+    def nugget(self):
+        return torch.exp(self.raw_nugget)
+
+    def forward(self, x):
+        """
+        Parameters
+        ----------
+        x : Tensor
+            Shape [n, d] or [B, n, d]
+
+        Returns
+        -------
+        K : Tensor
+            Shape [n, n] or [B, n, n]
+        """
+        K = None
+        for comp in self.components:
+            Kq = comp(x)
+            K = Kq if K is None else K + Kq
+
+        n = x.shape[-2]
+        eye = torch.eye(n, device=x.device, dtype=x.dtype)
+        if x.dim() == 3:
+            eye = eye.unsqueeze(0)
+
+        return K + self.nugget * eye
+
+class Wilson2015Deep(torch.nn.Module):
+    def __init__(self, NN_size, weights, means, variances, nugget=1e-6):
+        super().__init__()
+        self.transformer = _build_block(NN_size)
+        self.sm_kernel = SpectralMixtureKernel(weights, means, variances, nugget)
+
+    def forward(self, x):
+        """
+        Parameters
+        ----------
+        x : Tensor
+            Shape [n, d] or [B, n, d]
+
+        Returns
+        -------
+        K : Tensor
+            Shape [n, n] or [B, n, n]
+        """
+        x_trans = self.transformer(x)
+        return self.sm_kernel(x_trans)
+        

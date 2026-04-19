@@ -42,3 +42,34 @@ def init_VGP(d, device=torch.device("cpu")):
     }
     model = DeepKernelNNGP.GPVecchia(MeanClass, CovClass, mean_class_init, cov_class_init)
     return model, model_specs
+
+def init_VGP_SM(d, device=torch.device("cpu")):
+    MeanClass = DeepKernelNNGP.ConstMean
+    CovClass = DeepKernelNNGP.SpectralMixtureKernel
+    mean_class_init = [0.0]
+    cov_class_init = [[0.1] * 6] + [[[0 for _ in range(d)] for _ in range(6)]] + \
+        [[[1 for _ in range(d)] for _ in range(6)]] + [0.01]
+    model_specs = {
+        'MeanClass': MeanClass.__name__,
+        'mean_class_init': mean_class_init,
+        'CovClass': CovClass.__name__,
+        'cov_class_init': cov_class_init,
+    }
+    model = DeepKernelNNGP.GPVecchia(MeanClass, CovClass, mean_class_init, cov_class_init)
+    return model, model_specs
+
+def init_VGP_Wilson2015Deep(d, device=torch.device("cpu")):
+    MeanClass = DeepKernelNNGP.ConstMean
+    CovClass = DeepKernelNNGP.Wilson2015Deep
+    mean_class_init = [0.0]
+    cov_class_init = [[d, 1000, 1000, 500, 50, 2]] + [[0.1] * 6] + \
+        [[[0 for _ in range(2)] for _ in range(6)]] + \
+        [[[1 for _ in range(2)] for _ in range(6)]] + [0.01]
+    model_specs = {
+        'MeanClass': MeanClass.__name__,
+        'mean_class_init': mean_class_init,
+        'CovClass': CovClass.__name__,
+        'cov_class_init': cov_class_init,
+    }
+    model = DeepKernelNNGP.GPVecchia(MeanClass, CovClass, mean_class_init, cov_class_init)
+    return model, model_specs

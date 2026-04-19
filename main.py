@@ -6,7 +6,7 @@ import random
 import numpy as np
 from dataloader import Vecc_Dataloader_GP_sim, Vecc_Dataloader_Dataset
 from parse_args import parse_args
-from models import init_DeepKernelNNGP, init_VGP
+from models import *
 
 # %% varying tuning parameters
 args = parse_args()
@@ -74,6 +74,10 @@ if method == "DeepKernelNNGP":
     model, model_specs = init_DeepKernelNNGP(d, dropout=dropout_ratio, device=device)
 elif method == "VGP":
     model, model_specs = init_VGP(d, device=device)
+elif method == "VGP_SM":
+    model, model_specs = init_VGP_SM(d, device=device)
+elif method == "VGP_Wilson2015Deep":
+    model, model_specs = init_VGP_Wilson2015Deep(d, device=device)
 else:
     raise ValueError("Undefined method name")
 
