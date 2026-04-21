@@ -1,7 +1,7 @@
 import torch
 import pandas
 import os
-from DeepKernelNNGP import MyMaternKernel, MyNSKernel_Scale, MyNSKernel_Lengthscale, MyNSKernel_Kron
+from DeepKernelNNGP import MyMaternKernel, MyNSKernel_Lengthscale, PeriodicKernel, TransformedMaternKernel
 from scipy.stats.qmc import LatinHypercube
 
 class ZeroMean(torch.nn.Module):
@@ -47,8 +47,11 @@ def sim_GP_data(mean_obj, kernel, n_train, n_test, d=2, mean_name="meanname",
     torch.manual_seed(seed)
     if locs is None:
         locs = torch.from_numpy(LatinHypercube(d).random(n)).float()
-    mean_y = mean_obj(locs)
-    covmat = kernel(locs).to_dense()
+        locs_scaled = locs * ((n / 31)**(1/d))
+    else:
+        locs_scaled = locs
+    mean_y = mean_obj(locs_scaled)
+    covmat = kernel(locs_scaled).to_dense()
     L = torch.linalg.cholesky(covmat)
     x = torch.normal(0.0, 1.0, (n, 1))
     y = L @ x + mean_y
@@ -68,15 +71,14 @@ if __name__ == "__main__":
     n = 2500
     n_train = 2000
     n_test = 500
-    d = 2
+    d = 3
     mean_obj_mean0 = ZeroMean()
-    mean_obj_Paraboloid = ParaboloidMean()
     kernel_Matern = MyMaternKernel(1.0, [0.03] * d, 1.5, 0.01)
-    kernel_NS_scale = MyNSKernel_Scale(1.0, -4.0, 4.0, 0.1, 0.5, 0.01)
-    kernel_NS_lengthrange = MyNSKernel_Lengthscale(-4., 4., -4., 1.0, 0.03)
-    kernel_NS_kron = MyNSKernel_Kron(0.0, -1.2, 1.2, 0.03, 0.5, 0.01)
-    kernel_and_name = zip([kernel_Matern, kernel_NS_scale, kernel_NS_lengthrange, kernel_NS_kron], 
-                          ["Matern", "NS_scale", "NS_range", "NS_kron"])
+    kernel_NS_lengthrange = MyNSKernel_Lengthscale(-2.0, 1.0, -1.0, 1.0, 0.01)
+    kernel_Periodic = PeriodicKernel(1.0, 0.5, d, 0.01)
+    kernel_TransMatern = TransformedMaternKernel(d, 1.0, 0.1 * (d ** 0.5), 1.5, 0.01)
+    kernel_and_name = zip([kernel_Matern, kernel_NS_lengthrange, kernel_Periodic, kernel_TransMatern], 
+                          ["Matern", "NS_range", "Periodic", "TransMatern"])
     
     for kernel, kernel_name in kernel_and_name:
         fn_base = file_name(n_train, n_test, d, "mean0", kernel_name, locs=None)
