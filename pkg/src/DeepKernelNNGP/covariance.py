@@ -317,6 +317,30 @@ class PeriodicKernel(torch.nn.Module):
         else:
             return covmat
 
+def _generate_magic_square(d):
+    if d % 2 == 0:
+        raise ValueError("This specific implementation is for odd dimensions only.")
+
+    # Initialize a d x d matrix with zeros
+    magic_square = torch.zeros((d, d))
+
+    # Starting position for 1
+    row, col = 0, d // 2
+
+    for num in range(1, d**2 + 1):
+        magic_square[row, col] = num
+        
+        # Calculate next position: up one, right one
+        new_row, new_col = (row - 1) % d, (col + 1) % d
+        
+        # If the cell is already filled, move down instead
+        if magic_square[new_row, new_col]:
+            row = (row + 1) % d
+        else:
+            row, col = new_row, new_col
+
+    return magic_square
+
 class TransformedMaternKernel(torch.nn.Module):
     """
     Isotropic Matérn kernel with a learned domain transformation.
@@ -353,7 +377,7 @@ class TransformedMaternKernel(torch.nn.Module):
             raise ValueError("nugget must be positive")
 
         self.d = d
-        self.transformer = torch.nn.Parameter(torch.rand(d, d) * 2.0 / d)
+        self.transformer = torch.nn.Parameter(_generate_magic_square(d) / (d * (d**2 + 1) / 2))
 
         # Use a base Matérn kernel with unit lengthscale after manual scaling
         self.base_kernel = gpytorch.kernels.MaternKernel(nu=nu)
