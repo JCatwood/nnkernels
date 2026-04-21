@@ -119,12 +119,23 @@ loss_MSE = torch.nn.MSELoss()
 with torch.no_grad():
     if train_type == "simulation":
         X_batch, y_batch, y_true = dataloader.get_test_batch(size=n_batch*10, m=m)
+        X_batch, y_batch, y_true = X_batch.to(device), y_batch.to(device), y_true.to(device)
+        y_pred, y_pred_stderr = model(X_batch, y_batch)
+        loss_NLL_val = nll_loss(y_pred, y_true, y_pred_stderr)
+        loss_MSE_val = loss_MSE(y_pred, y_true)
     else:
-        X_batch, y_batch, y_true = dataloader.get_test_batch(size='all', m=m)
-    X_batch, y_batch, y_true = X_batch.to(device), y_batch.to(device), y_true.to(device)
-    y_pred, y_pred_stderr = model(X_batch, y_batch)
-    loss_NLL_val = nll_loss(y_pred, y_true, y_pred_stderr)
-    loss_MSE_val = loss_MSE(y_pred, y_true)
+        loss_NLL_val_total = torch.tensor(0.0, device=device, dtype=torch.get_default_dtype())
+        loss_MSE_val_total = torch.tensor(0.0, device=device, dtype=torch.get_default_dtype())
+        n_total = 0
+        for k in range(dataloader.n_replicates):
+            X_batch, y_batch, y_true = dataloader.get_test_batch(rep_ind=[k,], m=m)
+            X_batch, y_batch, y_true = X_batch.to(device), y_batch.to(device), y_true.to(device)
+            y_pred, y_pred_stderr = model(X_batch, y_batch)
+            loss_NLL_val_total += nll_loss(y_pred, y_true, y_pred_stderr) * y_pred.size(0)
+            loss_MSE_val_total += loss_MSE(y_pred, y_true) * y_pred.size(0)
+            n_total += y_pred.size(0)
+        loss_NLL_val = loss_NLL_val_total / n_total
+        loss_MSE_val = loss_MSE_val_total / n_total
     print(">>>")
     if train_type == "simulation":
         output_dict = {

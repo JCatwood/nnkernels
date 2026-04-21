@@ -358,7 +358,7 @@ class Vecc_Dataloader_Dataset(BaseVecchiaDataloader):
 
     def get_test_batch(
         self,
-        size: Union[int, str] = "all",
+        rep_ind: Union[Sequence[int], str] = "all",
         m: int = 30,
         *args,
         **kwargs,
@@ -368,8 +368,8 @@ class Vecc_Dataloader_Dataset(BaseVecchiaDataloader):
 
         Parameters
         ----------
-        size : int or "all", default="all"
-            Number of test points to return.
+        rep_ind : sequence[int] or "all", default="all"
+            Indices of the replicates from which to return all test points.
         m : int, default=30
             Number of training neighbors.
 
@@ -383,12 +383,22 @@ class Vecc_Dataloader_Dataset(BaseVecchiaDataloader):
             Shape [B, 1, 1].
         """
         n_total = self.offset_test[-1]
-        if size == "all":
+
+        if rep_ind == "all":
             ind = torch.arange(n_total)
         else:
-            assert isinstance(size, int)
-            assert size <= n_total, f"size should be less than or equal to {n_total}"
-            ind = torch.randperm(n_total)[:size]
+            rep_ind = list(rep_ind)
+
+            assert len(rep_ind) > 0, "rep_ind must be non-empty"
+            assert all(0 <= i < self.n_replicates for i in rep_ind), (
+                f"replicate indices must be between 0 and {self.n_replicates - 1}"
+            )
+            assert len(set(rep_ind)) == len(rep_ind), "rep_ind contains duplicate indices"
+
+            ind = torch.cat(
+                [torch.arange(self.offset_test[i], self.offset_test[i + 1]) for i in rep_ind],
+                dim=0,
+            )
 
         if self.NN_test is None or self.NN_test.size(1) < m:
             self.update_NN(m=m)
