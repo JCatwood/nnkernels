@@ -47,7 +47,7 @@ def sim_GP_data(mean_obj, kernel, n_train, n_test, d=2, mean_name="meanname",
     torch.manual_seed(seed)
     if locs is None:
         locs = torch.from_numpy(LatinHypercube(d).random(n)).float()
-        locs_scaled = locs * ((n / 31)**(1/d))
+        locs_scaled = locs * ((n / 100)**(1/d))
     else:
         locs_scaled = locs
     mean_y = mean_obj(locs_scaled)
@@ -74,7 +74,7 @@ if __name__ == "__main__":
     d = 3
     mean_obj_mean0 = ZeroMean()
     kernel_Matern = MyMaternKernel(1.0, [0.03] * d, 1.5, 0.01)
-    kernel_NS_lengthrange = MyNSKernel_Lengthscale(-2.0, 1.0, -1.0, 1.0, 0.01)
+    kernel_NS_lengthrange = MyNSKernel_Lengthscale(-4.0, 4.0, -4.0, 1.0, 0.01)
     kernel_Periodic = PeriodicKernel(1.0, 0.5, d, 0.01)
     kernel_TransMatern = TransformedMaternKernel(d, 1.0, 0.1 * (d ** 0.5), 1.5, 0.01)
     kernel_and_name = zip([kernel_Matern, kernel_NS_lengthrange, kernel_Periodic, kernel_TransMatern], 
