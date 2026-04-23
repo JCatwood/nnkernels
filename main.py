@@ -83,11 +83,18 @@ else:
 
 # %% model training
 optimizer = torch.optim.AdamW(model.parameters(), lr=1e-3, weight_decay=1e-4)
-scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
-    optimizer,
-    T_max=n_iter,
-    eta_min=1e-5,
-)
+if train_type == "data":
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+        optimizer,
+        T_max=n_iter,
+        eta_min=1e-4,
+    )
+else:
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+        optimizer,
+        T_max=n_iter,
+        eta_min=1e-5,
+    )
 model.to(device)
 model.train()
 
