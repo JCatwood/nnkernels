@@ -95,6 +95,7 @@ train_batch_size = n_batch
 if train_type == "data":
     train_batch_size = min(n_batch, dataloader.offset_train[-1])
 
+timer_bgn = time.perf_counter()
 timer = time.perf_counter()
 for iter in range(n_iter):
     X_batch, y_batch, y_true = dataloader.get_minibatch(size=train_batch_size, m=m)
@@ -113,6 +114,8 @@ for iter in range(n_iter):
         print(f"Elapsed time: {timer - timer_prev} seconds", flush=True)
         print(f"Current LR: {optimizer.param_groups[0]['lr']}", flush=True)
         print(f"Loss after {iter} iterations is {loss.detach().item()}", flush=True)
+timer_end = time.perf_counter()
+time_total = timer_end - timer_bgn
 # %% evaluate
 model.eval()
 loss_MSE = torch.nn.MSELoss()
@@ -147,6 +150,7 @@ with torch.no_grad():
             "NLL": loss_NLL_val.item(),
             "MSE": loss_MSE_val.item(),
             "model_specs": model_specs,
+            "time_total": time_total,
         }
     else:
         output_dict = {
@@ -158,6 +162,7 @@ with torch.no_grad():
             "MSE": loss_MSE_val.item(),
             "n_replicates": n_replicates,
             "model_specs": model_specs,
+            "time_total": time_total,
         }
     output_str = json.dumps(output_dict)
     print(output_str)
