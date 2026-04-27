@@ -88,13 +88,11 @@ def subsample_per_float(dataset, n_obs_per_float=100):
 # %% set seed
 random.seed(123)
 np.random.seed(123)
+data_subset_list = []
 # %% random split into training and testing
 for k in range(len(years)):
     year = years[k]
-    fn_out = f"data/Argo/seed_{k}/"
     fn = f"data/Argo_raw/argo_february_{year}.csv"
-    os.makedirs(fn_out + "train/", exist_ok=True)
-    os.makedirs(fn_out + "test/", exist_ok=True)
     data = pd.read_csv(fn, sep=',', header=0)
     data.dropna(inplace=True)
     data['platform_number'] = data['platform_number'].astype(int)
@@ -102,11 +100,27 @@ for k in range(len(years)):
     data['dayofyear'] = data['dayofyear'].astype(int)
     data['year'] = data['year'].astype(int)
     data_subset = subsample_per_float(data, 200)
-    data_train = data_subset.sample(frac=0.8, random_state=123)
-    data_test = data_subset.drop(data_train.index)
-    x_train = data_train.iloc[:, :-1]
+    data_subset_list.append(data_subset)
+full_data_subset = pd.concat(data_subset_list, axis=0)
+global_min = full_data_subset.min()
+global_max = full_data_subset.max()
+range_denom = global_max - global_min
+def _normalize_df(df, g_min, g_denom):
+    # Align global stats with the columns present in the specific dataframe
+    cols = df.columns
+    return (df - g_min[cols]) / g_denom[cols]
+
+
+for k, data_subset in enumerate(data_subset_list):
+    fn_out = f"data/Argo/seed_{k}/"
+    os.makedirs(fn_out + "train/", exist_ok=True)
+    os.makedirs(fn_out + "test/", exist_ok=True)
+    data_subset_normalized = _normalize_df(data_subset, global_min, range_denom)
+    data_train = data_subset_normalized.sample(frac=0.8, random_state=123)
+    data_test = data_subset_normalized.drop(data_train.index)
+    x_train = data_train.iloc[:, :4]
     y_train = data_train.iloc[:, -1:]
-    x_test = data_test.iloc[:, :-1]
+    x_test = data_test.iloc[:, :4]
     y_test = data_test.iloc[:, -1:]
     x_train.to_csv(fn_out + "train/x.csv", index=False, header=False, mode='w')
     y_train.to_csv(fn_out + "train/y.csv", index=False, header=False, mode='w')
