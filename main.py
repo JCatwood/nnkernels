@@ -73,16 +73,23 @@ def set_seed(seed: int) -> None:
 set_seed(123)
 
 # %% model init
+if train_type == "data":
+    dropout_ratio = 0.2  
+    if data_name == "Argo":
+        special_case = "Argo"
+    else:
+        special_case = None
+else:
+    dropout_ratio = 0.0
+    special_case = None
 if method == "DeepKernelNNGP":
-    dropout_ratio = 0.2 if train_type == "data" else 0.0
-    size = "small" if train_type == "data" and data_name == "Argo" else None
-    model, model_specs = init_DeepKernelNNGP(d, dropout=dropout_ratio, device=device, size=size)
+    model, model_specs = init_DeepKernelNNGP(d, device=device, case=special_case, dropout=dropout_ratio)
 elif method == "VGP":
-    model, model_specs = init_VGP(d, device=device)
+    model, model_specs = init_VGP(d, device=device, case=special_case, dropout=dropout_ratio)
 elif method == "VGP_SM":
-    model, model_specs = init_VGP_SM(d, device=device)
+    model, model_specs = init_VGP_SM(d, device=device, case=special_case, dropout=dropout_ratio)
 elif method == "VGP_Wilson2015Deep":
-    model, model_specs = init_VGP_Wilson2015Deep(d, device=device)
+    model, model_specs = init_VGP_Wilson2015Deep(d, device=device, case=special_case, dropout=dropout_ratio)
 else:
     raise ValueError("Undefined method name")
 
