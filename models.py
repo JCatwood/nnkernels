@@ -1,17 +1,27 @@
 import torch 
 import DeepKernelNNGP
 
-def init_DeepKernelNNGP(d, dropout=0.0, device=torch.device("cpu")):
+def init_DeepKernelNNGP(d, dropout=0.0, device=torch.device("cpu"),
+                        size=None):
     MeanClass = DeepKernelNNGP.ConstMean
     CovClass = DeepKernelNNGP.NNKernel
     input_trans_type = 'locs_lastloc'
     nfeatures = DeepKernelNNGP.input_transformed_dim(d, input_trans_type)
-    if device.type == "cuda":
-        latent_dim = 64
-        dim_middle = 128
-    else: # device == torch.device('cpu')
-        latent_dim = 32
-        dim_middle = 64
+    size_configs = {
+        "small": {"latent_dim": 32, "dim_middle": 64},
+        "big": {"latent_dim": 64, "dim_middle": 128},
+    }
+
+    if size is None:
+        size = "big" if device.type == "cuda" else "small"
+
+    if size not in size_configs:
+        raise ValueError(
+            f"Invalid size={size!r}. Expected one of {list(size_configs)} or None."
+        )
+
+    latent_dim = size_configs[size]["latent_dim"]
+    dim_middle = size_configs[size]["dim_middle"]
     nlayer_middle_rho = 3
     nlayer_middle_phi = 3
     nlayer_middle_rho1 = 3

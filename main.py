@@ -18,6 +18,9 @@ kernel_gen_name = args["kernel_gen_name"]
 KernelGen = args["KernelGen"]
 data_name = args["data_name"]
 n_replicates = args["n_replicates"]
+enforce_cross_group_nn = args["enforce_cross_group_nn"]
+group_ind_col = args["group_ind_col"]
+max_nobs_per_group = args["max_nobs_per_group"]
 
 if n_replicates is not None and n_replicates > 1:
     data_seeds = range(n_replicates)
@@ -52,7 +55,8 @@ if train_type == "simulation":
         kernel_gen_init = [0.3, 1.5, 0.01]
     dataloader = Vecc_Dataloader_GP_sim(KernelGen, kernel_gen_init, d, "y", device=device)
 else:
-    dataloader = Vecc_Dataloader_Dataset(data_name, data_seeds)
+    dataloader = Vecc_Dataloader_Dataset(data_name, data_seeds, enforce_cross_group_nn,
+                                         group_ind_col, max_nobs_per_group)
 
 def nll_loss(y_pred, y_true, y_stderr, eps=1e-6):
     y_stderr = y_stderr.clamp_min(eps)
@@ -71,7 +75,8 @@ set_seed(123)
 # %% model init
 if method == "DeepKernelNNGP":
     dropout_ratio = 0.2 if train_type == "data" else 0.0
-    model, model_specs = init_DeepKernelNNGP(d, dropout=dropout_ratio, device=device)
+    size = "small" if train_type == "data" and data_name == "Argo" else None
+    model, model_specs = init_DeepKernelNNGP(d, dropout=dropout_ratio, device=device, size=size)
 elif method == "VGP":
     model, model_specs = init_VGP(d, device=device)
 elif method == "VGP_SM":

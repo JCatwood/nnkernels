@@ -336,10 +336,10 @@ class Vecc_Dataloader_Dataset(BaseVecchiaDataloader):
         self,
         data_name: str,
         seeds: Optional[Sequence[int]] = None,
-        floattype: torch.dtype = torch.float32,
         enforce_cross_group_nn = False,
         group_ind_col: Optional[int] = None,
         max_nobs_per_group: Optional[int] = None,
+        floattype: torch.dtype = torch.float32,
         *args,
         **kwargs,
     ) -> None:

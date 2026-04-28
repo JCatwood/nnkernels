@@ -85,12 +85,23 @@ def parse_args():
             KernelGen = COV_MAP[kernel_gen_name]
         data_name = None
         n_replicates = None
+        enforce_cross_group_nn = False
+        group_ind_col = None
+        max_nobs_per_group = None
 
     else:  # data mode
         data_name = args.wildcard_arg or "GP_d2_rndlocs_mean0_Matern_2000_500"
         kernel_gen_name = None
         KernelGen = None
         n_replicates = args.n_replicates if args.n_replicates is not None else 1
+        if data_name == "Argo":
+            enforce_cross_group_nn = True
+            group_ind_col = -1
+            max_nobs_per_group = 200
+        else:
+            enforce_cross_group_nn = False
+            group_ind_col = None
+            max_nobs_per_group = None
     
 
     return {
@@ -102,4 +113,7 @@ def parse_args():
         "KernelGen": KernelGen,
         "data_name": data_name,
         "n_replicates": n_replicates,
+        "enforce_cross_group_nn": enforce_cross_group_nn,
+        "group_ind_col": group_ind_col,
+        "max_nobs_per_group": max_nobs_per_group,
     }
