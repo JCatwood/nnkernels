@@ -92,6 +92,113 @@ def _build_knn_indices(X_fit: Tensor, X_query: Tensor, n_neighbors: int) -> Tens
     idx = nn.kneighbors(X_query_np, n_neighbors=n_neighbors, return_distance=False)
     return torch.from_numpy(idx).long()
 
+def _build_knn_indices_diff_group(
+    X_fit: Tensor,
+    X_fit_group_ind: Tensor,
+    X_query: Tensor,
+    X_query_group_ind: Tensor,
+    n_neighbors: int,
+    extra_search: int
+) -> Tensor:
+    """
+    Compute k-nearest neighbor indices under a cross-group constraint.
+
+    This function finds nearest neighbors of each query point in `X_query`
+    from the reference set `X_fit`, subject to the constraint that selected
+    neighbors must belong to *different groups* than the query point.
+
+    The method first retrieves `k = n_neighbors + extra_search` nearest
+    candidates using sklearn's NearestNeighbors, then filters and reorders
+    them to enforce the group constraint.
+
+    Parameters
+    ----------
+    X_fit : torch.Tensor
+        Reference feature matrix of shape [n_fit, d].
+
+    X_fit_group_ind : torch.Tensor
+        Group indices for reference points, shape [n_fit].
+        Each entry specifies the group ID associated with the corresponding
+        row in `X_fit`.
+
+    X_query : torch.Tensor
+        Query feature matrix of shape [n_query, d].
+
+    X_query_group_ind : torch.Tensor
+        Group indices for query points, shape [n_query].
+
+    n_neighbors : int
+        Number of valid neighbors (from different groups) to return per query.
+
+    extra_search : int
+        Additional neighbors to retrieve beyond `n_neighbors` to compensate
+        for filtering due to the group constraint. The total number of
+        candidates retrieved is `min(n_neighbors + extra_search, n_fit)`.
+
+        This parameter must be sufficiently large to ensure that at least
+        `n_neighbors` cross-group neighbors exist for every query point.
+
+    Returns
+    -------
+    idx : torch.Tensor
+        Long tensor of shape [n_query, n_neighbors], containing indices into
+        `X_fit`. Each row corresponds to a query point, and the returned
+        neighbors are the closest points belonging to *different groups*
+        than the query.
+
+    Raises
+    ------
+    ValueError
+        If fewer than `n_neighbors` valid cross-group neighbors can be found
+        for any query point after filtering.
+
+    Notes
+    -----
+    - If `X_fit` and `X_query` are identical (checked via `torch.equal`),
+      the function assumes that the first nearest neighbor returned by
+      sklearn is the point itself. In this case, that self-match is always
+      retained, and the group constraint is only enforced on subsequent
+      neighbors.
+
+    - The function performs computations on CPU using NumPy and sklearn,
+      regardless of the original device of the tensors.
+
+    - The stability of neighbor ordering is preserved when reordering
+      valid vs. invalid candidates.
+
+    Complexity
+    ----------
+    - Nearest neighbor search: O(n_query * log(n_fit)) (approximate, depending on backend)
+    - Post-processing: O(n_query * k log k)
+    """
+    n = X_fit.shape[0]
+    k = min(n_neighbors + extra_search, n)
+
+    X_fit_np = X_fit.detach().cpu().numpy()
+    X_query_np = X_query.detach().cpu().numpy()
+
+    nn_search = NearestNeighbors(n_neighbors=k, algorithm="auto")
+    nn_search.fit(X_fit_np)
+    nn_np = nn_search.kneighbors(X_query_np, n_neighbors=k, return_distance=False)
+
+    NN = torch.from_numpy(nn_np).long()
+    NN_group_ind = X_fit_group_ind[NN]
+
+    if torch.equal(X_fit, X_query):
+        valid_mask = torch.zeros_like(NN, dtype=torch.bool)
+        valid_mask[:, 0] = True
+        valid_mask[:, 1:] = NN_group_ind[:, 1:] != NN_group_ind[:, 0:1]
+    else:
+        valid_mask = NN_group_ind != X_query_group_ind.unsqueeze(-1)
+
+    order = torch.argsort((~valid_mask).long(), dim=1, stable=True)
+    NN_reordered = torch.gather(NN, 1, order)
+    valid_reordered = torch.gather(valid_mask, 1, order)
+
+    if torch.any(valid_reordered[:, :n_neighbors].sum(dim=1) < n_neighbors):
+        raise ValueError("Not enough cross-group neighbors found for certain observations.")
+
+    return NN_reordered[:, :n_neighbors]
 
 class Vecc_Dataloader_GP_sim(torch.nn.Module, BaseVecchiaDataloader):
     """
@@ -212,6 +319,17 @@ class Vecc_Dataloader_Dataset(BaseVecchiaDataloader):
         Replicate identifiers.
     floattype : torch.dtype, default=torch.float32
         Data dtype.
+    enforce_cross_group_nn : bool, default=False
+    If True, nearest neighbors are restricted to come from different groups.
+
+    group_ind_col : int, optional
+        Column index in the input data corresponding to group identifiers.
+        Required if `enforce_cross_group_nn=True`.
+
+    max_nobs_per_group : int, optional
+        Upper bound on the number of observations per group. Used to set
+        the `extra_search` parameter in nearest-neighbor queries to ensure
+        sufficient cross-group candidates.
     """
 
     def __init__(
@@ -219,6 +337,9 @@ class Vecc_Dataloader_Dataset(BaseVecchiaDataloader):
         data_name: str,
         seeds: Optional[Sequence[int]] = None,
         floattype: torch.dtype = torch.float32,
+        enforce_cross_group_nn = False,
+        group_ind_col: Optional[int] = None,
+        max_nobs_per_group: Optional[int] = None,
         *args,
         **kwargs,
     ) -> None:
@@ -263,6 +384,24 @@ class Vecc_Dataloader_Dataset(BaseVecchiaDataloader):
             self.offset_train = [0, self.X_train.size(0)]
             self.offset_test = [0, self.X_test.size(0)]
 
+        
+        self.enforce_cross_group_nn = enforce_cross_group_nn
+        self.max_nobs_per_group = max_nobs_per_group
+        if self.enforce_cross_group_nn:
+            if group_ind_col is None:
+                raise ValueError("group_ind_col must be provided when enforce_cross_group_nn=True")
+            if self.max_nobs_per_group is None:
+                raise ValueError("max_nobs_per_group must be specified when enforce_cross_group_nn=True")
+            self.group_ind_train = self.X_train[:, group_ind_col].long()
+            self.group_ind_test = self.X_test[:, group_ind_col].long()
+            col_mask = torch.ones(self.X_train.size(1), dtype=torch.bool)
+            col_mask[group_ind_col] = False
+            self.X_train = self.X_train[:, col_mask]
+            self.X_test = self.X_test[:, col_mask]
+        else:
+            self.group_ind_train = None
+            self.group_ind_test = None
+
         self.d = self.X_train.size(1)
         self.n_replicates = len(self.n_train)
         self.NN_rev_train: Optional[Tensor] = None
@@ -296,25 +435,38 @@ class Vecc_Dataloader_Dataset(BaseVecchiaDataloader):
             te0, te1 = self.offset_test[i], self.offset_test[i + 1]
 
             n_train_i = tr1 - tr0
-            if n_train_i < m + 1:
-                raise ValueError(
-                    f"Replicate {i} has only {n_train_i} training points, but m+1={m+1} is required."
-                )
-
-            nn_train = _build_knn_indices(
-                X_scaled_train[tr0:tr1, :],
-                X_scaled_train[tr0:tr1, :],
-                n_neighbors=m + 1,
-            ) + tr0
-
+            if self.enforce_cross_group_nn:
+                if n_train_i < m + 1 + self.max_nobs_per_group:
+                    raise ValueError(
+                        f"Replicate {i} has only {n_train_i} training points, "
+                        f"but m + 1 + self.max_nobs_per_group={m + 1 + self.max_nobs_per_group} is required."
+                    )
+                nn_train = _build_knn_indices_diff_group(
+                    X_scaled_train[tr0:tr1, :], self.group_ind_train[tr0:tr1],
+                    X_scaled_train[tr0:tr1, :], self.group_ind_train[tr0:tr1],
+                    n_neighbors=m + 1, extra_search=self.max_nobs_per_group
+                ) + tr0
+                nn_test = _build_knn_indices_diff_group(
+                    X_scaled_train[tr0:tr1, :], self.group_ind_train[tr0:tr1],
+                    X_scaled_test[te0:te1, :], self.group_ind_test[te0:te1],
+                    n_neighbors=m, extra_search=self.max_nobs_per_group
+                ) + tr0
+            else:
+                if n_train_i < m + 1:
+                    raise ValueError(
+                        f"Replicate {i} has only {n_train_i} training points, but m+1={m+1} is required."
+                    )
+                nn_train = _build_knn_indices(
+                    X_scaled_train[tr0:tr1, :],
+                    X_scaled_train[tr0:tr1, :],
+                    n_neighbors=m + 1,
+                ) + tr0
+                nn_test = _build_knn_indices(
+                    X_scaled_train[tr0:tr1, :],
+                    X_scaled_test[te0:te1, :],
+                    n_neighbors=m,
+                ) + tr0
             nn_rev_train_parts.append(nn_train[:, torch.arange(m, -1, -1)])
-
-            nn_test = _build_knn_indices(
-                X_scaled_train[tr0:tr1, :],
-                X_scaled_test[te0:te1, :],
-                n_neighbors=m,
-            ) + tr0
-
             nn_test_parts.append(nn_test)
 
         self.NN_rev_train = torch.cat(nn_rev_train_parts, dim=0)
@@ -340,6 +492,12 @@ class Vecc_Dataloader_Dataset(BaseVecchiaDataloader):
             Shape [B, m+1, 1], with target entry masked to zero.
         target : torch.Tensor
             Shape [B, 1, 1].
+        
+        Notes
+        -----
+        - For each row, the last entry corresponds to the target point,
+        and the preceding m entries correspond to its conditioning set.
+        - The response of the target point is masked to zero in `y_batch`.
         """
         n_total = self.offset_train[-1]
         assert size <= n_total, f"size should be less than or equal to {n_total}"
@@ -349,7 +507,7 @@ class Vecc_Dataloader_Dataset(BaseVecchiaDataloader):
 
         ind = torch.randperm(n_total)[:size]
         ind_NN = self.NN_rev_train[ind, -(m + 1):]
-
+        ind_NN = ind_NN.to(self.X_train.device)
         X_batch = self.X_train[ind_NN, :]
         y_batch = self.y_train[ind_NN, :].clone()
         target = y_batch[:, -1:, :].clone()
