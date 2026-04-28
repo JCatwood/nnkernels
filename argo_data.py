@@ -105,22 +105,27 @@ full_data_subset = pd.concat(data_subset_list, axis=0)
 global_min = full_data_subset.min()
 global_max = full_data_subset.max()
 range_denom = global_max - global_min
-def _normalize_df(df, g_min, g_denom):
-    # Align global stats with the columns present in the specific dataframe
-    cols = df.columns
-    return (df - g_min[cols]) / g_denom[cols]
+def _normalize_df(df, g_min, g_denom, col_ind = None):
+    df = df.copy()
+    if col_ind is not None:
+        cols = df.columns[col_ind]
+    else:
+        cols = df.columns
+    
+    df[cols] = (df[cols] - g_min.loc[cols]) / g_denom.loc[cols]
+    return df
 
 
 for k, data_subset in enumerate(data_subset_list):
     fn_out = f"data/Argo/seed_{k}/"
     os.makedirs(fn_out + "train/", exist_ok=True)
     os.makedirs(fn_out + "test/", exist_ok=True)
-    data_subset_normalized = _normalize_df(data_subset, global_min, range_denom)
+    data_subset_normalized = _normalize_df(data_subset, global_min, range_denom, col_ind=range(4))
     data_train = data_subset_normalized.sample(frac=0.8, random_state=123)
     data_test = data_subset_normalized.drop(data_train.index)
-    x_train = data_train.iloc[:, :4]
+    x_train = data_train.iloc[:, [0, 1, 2, 3, 5]]
     y_train = data_train.iloc[:, -1:]
-    x_test = data_test.iloc[:, :4]
+    x_test = data_test.iloc[:, [0, 1, 2, 3, 5]]
     y_test = data_test.iloc[:, -1:]
     x_train.to_csv(fn_out + "train/x.csv", index=False, header=False, mode='w')
     y_train.to_csv(fn_out + "train/y.csv", index=False, header=False, mode='w')
