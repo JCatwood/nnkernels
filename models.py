@@ -5,7 +5,7 @@ def _get_mean_config(case, nfeatures, dropout=0.0):
     if case == "Argo":
         return (
             DeepKernelNNGP.NNMean,
-            [nfeatures, [16, 16, 16], dropout],
+            [nfeatures, [8, 8, 8], dropout],
         )
     else:
         return (
@@ -23,7 +23,7 @@ def init_DeepKernelNNGP(d, device=None, case=None, dropout=0.0):
     nn_size_configs = {
         "small": {"latent_dim": 32, "dim_middle": 64},
         "big": {"latent_dim": 64, "dim_middle": 128},
-        "Argo": {"latent_dim": 16, "dim_middle": 32},
+        "Argo": {"latent_dim": 16, "dim_middle": 16},
     }
 
     if case is None:

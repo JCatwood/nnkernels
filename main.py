@@ -74,7 +74,7 @@ set_seed(123)
 
 # %% model init
 if train_type == "data":
-    dropout_ratio = 0.2  
+    dropout_ratio = 0.3  
     if data_name == "Argo":
         special_case = "Argo"
     else:
