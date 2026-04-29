@@ -101,8 +101,21 @@ def init_VGP_Wilson2015Deep(d, device=None, case=None, dropout=0.0):
 
     nfeatures = d
     MeanClass, mean_class_init = _get_mean_config(case, nfeatures, dropout)
+    
+    nn_size_configs = {
+        "default": [nfeatures, 1000, 1000, 500, 50, 2],
+        "Argo": [nfeatures, 500, 500, 250, 50, 2],
+    }
+    if case is None:
+        nn_case = "default"
+    else:
+        if case not in nn_size_configs:
+            raise ValueError(
+                f"Invalid case={case!r}. Expected one of {list(nn_size_configs)} or None."
+            )
+        nn_case = case
     CovClass = DeepKernelNNGP.Wilson2015Deep
-    cov_class_init = [[d, 1000, 1000, 500, 50, 2]] + [[0.1] * 6] + \
+    cov_class_init = [nn_size_configs[nn_case]] + [[0.1] * 6] + \
         [[[0 for _ in range(2)] for _ in range(6)]] + \
         [[[1 for _ in range(2)] for _ in range(6)]] + [0.01]
     model_specs = {
