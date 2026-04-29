@@ -3,24 +3,40 @@ import json
 import math
 import random
 import numpy as np
+import argparse
 from dataloader import Vecc_Dataloader_GP_sim
 import DeepKernelNNGP
 from kernel_config import sim_kernel_config
 
 # parse args 
-d = 3
-m = 30
+parser = argparse.ArgumentParser(description="Loss under true covariance")
+parser.add_argument(
+    "d",
+    nargs="?",
+    type=int,
+    default=2,
+    help="Number of features of the dataset",
+)
+
+parser.add_argument(
+    "m",
+    nargs="?",
+    type=int,
+    default=30,
+    help="Size of the conditioning set",
+)
+args = parser.parse_args()
+d = args.d
+m = args.m
 
 if torch.cuda.is_available():
     print(f"GPU is available. Using device: {torch.cuda.get_device_name(0)}")
     device = torch.device("cuda")
     n_batch = 2048
-    n_iter = 60001
 else:
     print("GPU is not available. Using CPU.")
     device = torch.device("cpu")
     n_batch = 1024
-    n_iter = 3001
 
 def nll_loss(y_pred, y_true, y_stderr, eps=1e-6):
     y_stderr = y_stderr.clamp_min(eps)
