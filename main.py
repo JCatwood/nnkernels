@@ -22,6 +22,7 @@ n_replicates = args["n_replicates"]
 enforce_cross_group_nn = args["enforce_cross_group_nn"]
 group_ind_col = args["group_ind_col"]
 max_nobs_per_group = args["max_nobs_per_group"]
+lengthscale_init = args["lengthscale_init"]
 
 if n_replicates is not None and n_replicates > 1:
     data_seeds = range(n_replicates)
@@ -43,7 +44,7 @@ if train_type == "simulation":
     dataloader = Vecc_Dataloader_GP_sim(KernelGen, kernel_gen_init, d, "y", device=device)
 else:
     dataloader = Vecc_Dataloader_Dataset(data_name, data_seeds, enforce_cross_group_nn,
-                                         group_ind_col, max_nobs_per_group)
+                                         group_ind_col, max_nobs_per_group, lengthscale_init)
 
 def nll_loss(y_pred, y_true, y_stderr, eps=1e-6):
     y_stderr = y_stderr.clamp_min(eps)

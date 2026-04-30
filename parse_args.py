@@ -87,7 +87,7 @@ def parse_args():
         enforce_cross_group_nn = False
         group_ind_col = None
         max_nobs_per_group = None
-
+        lengthscale_init = None
     else:
         data_name = args.wildcard_arg or "GP_d2_rndlocs_mean0_Matern_2000_500"
 
@@ -101,10 +101,12 @@ def parse_args():
             enforce_cross_group_nn = True
             group_ind_col = -1
             max_nobs_per_group = 200
+            lengthscale_init = [0.1372, 0.1310, 0.0244, 0.2053]
         else:
             enforce_cross_group_nn = False
             group_ind_col = None
             max_nobs_per_group = None
+            lengthscale_init = None
 
     return {
         "method": args.method,
@@ -119,4 +121,5 @@ def parse_args():
         "enforce_cross_group_nn": enforce_cross_group_nn,
         "group_ind_col": group_ind_col,
         "max_nobs_per_group": max_nobs_per_group,
+        "lengthscale_init": lengthscale_init,
     }

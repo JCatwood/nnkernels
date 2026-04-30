@@ -330,6 +330,9 @@ class Vecc_Dataloader_Dataset(BaseVecchiaDataloader):
         Upper bound on the number of observations per group. Used to set
         the `extra_search` parameter in nearest-neighbor queries to ensure
         sufficient cross-group candidates.
+    
+    lengthscale_init : sequence, optional
+        Lengthscale used for finding NN
     """
 
     def __init__(
@@ -339,6 +342,7 @@ class Vecc_Dataloader_Dataset(BaseVecchiaDataloader):
         enforce_cross_group_nn = False,
         group_ind_col: Optional[int] = None,
         max_nobs_per_group: Optional[int] = None,
+        lengthscale_init: Optional[Sequence[float]] = None,
         floattype: torch.dtype = torch.float32,
         *args,
         **kwargs,
@@ -387,6 +391,10 @@ class Vecc_Dataloader_Dataset(BaseVecchiaDataloader):
         
         self.enforce_cross_group_nn = enforce_cross_group_nn
         self.max_nobs_per_group = max_nobs_per_group
+        if lengthscale_init is not None:
+            self.lengthscale_init = torch.tensor(lengthscale_init, dtype=floattype)
+        else:
+            self.lengthscale_init = None
         if self.enforce_cross_group_nn:
             if group_ind_col is None:
                 raise ValueError("group_ind_col must be provided when enforce_cross_group_nn=True")
@@ -503,7 +511,7 @@ class Vecc_Dataloader_Dataset(BaseVecchiaDataloader):
         assert size <= n_total, f"size should be less than or equal to {n_total}"
 
         if self.NN_rev_train is None or self.NN_rev_train.size(1) < m + 1:
-            self.update_NN(m=m)
+            self.update_NN(m=m, scale=self.lengthscale_init)
 
         ind = torch.randperm(n_total)[:size]
         ind_NN = self.NN_rev_train[ind, -(m + 1):]
@@ -559,7 +567,7 @@ class Vecc_Dataloader_Dataset(BaseVecchiaDataloader):
             )
 
         if self.NN_test is None or self.NN_test.size(1) < m:
-            self.update_NN(m=m)
+            self.update_NN(m=m, scale=self.lengthscale_init)
 
         ind_col = ind.unsqueeze(-1)
         X_test = self.X_test[ind_col, :]
