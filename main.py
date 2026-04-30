@@ -120,6 +120,9 @@ for iter in range(n_iter):
         print(f"Elapsed time: {timer - timer_prev} seconds", flush=True)
         print(f"Current LR: {optimizer.param_groups[0]['lr']}", flush=True)
         print(f"Loss after {iter} iterations is {loss.detach().item()}", flush=True)
+    if time.perf_counter() - timer_bgn > 3600 * 8: # max runtime 8 hours
+        print(f"Stopping early after {iter + 1} iterations due to time limit.", flush=True)
+        break
 timer_end = time.perf_counter()
 time_total = timer_end - timer_bgn
 # %% evaluate
