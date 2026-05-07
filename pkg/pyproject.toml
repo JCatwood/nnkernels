@@ -1,0 +1,14 @@
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "DeepKernelNNGP"
+version = "1.0.0"
+dependencies = [
+  "gpytorch",
+  "torch", "torchaudio", "torchvision",
+  "scipy",
+  "numpy",
+  "scikit-learn"
+]
