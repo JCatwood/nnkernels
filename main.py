@@ -13,6 +13,7 @@ args = parse_args()
 method = args["method"]
 d = args["d"]
 m = args["m"]
+seed = args["seed"]
 train_type = args["train_type"]
 kernel_gen_name = args["kernel_gen_name"]
 kernel_gen_init = args["kernel_gen_init"]
@@ -39,6 +40,14 @@ else:
     device = torch.device("cpu")
     n_batch = 1024
     n_iter = 3001
+
+def set_seed(seed: int) -> None:
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(seed)
+set_seed(seed)
 
 if train_type == "simulation":
     dataloader = Vecc_Dataloader_GP_sim(KernelGen, kernel_gen_init, d, "y", device=device)
@@ -72,14 +81,6 @@ def gaussian_crps(y_pred, y_true, y_stderr, eps=1e-6):
     )
 
     return crps.mean()
-
-def set_seed(seed: int) -> None:
-    random.seed(seed)
-    np.random.seed(seed)
-    torch.manual_seed(seed)
-    if torch.cuda.is_available():
-        torch.cuda.manual_seed_all(seed)
-set_seed(123)
 
 # %% model init
 if train_type == "data":
@@ -184,6 +185,7 @@ with torch.no_grad():
             "kernel_sim": kernel_gen_name,
             "model": method,
             "m": m,
+            "seed": seed,
             "NLL": loss_NLL_val.item(),
             "CRPS": loss_CRPS_val.item(),
             "MSE": loss_MSE_val.item(),
@@ -196,6 +198,7 @@ with torch.no_grad():
             "data_name": data_name,
             "model": method,
             "m": m,
+            "seed": seed,
             "NLL": loss_NLL_val.item(),
             "CRPS": loss_CRPS_val.item(),
             "MSE": loss_MSE_val.item(),

@@ -39,14 +39,16 @@ d=3
 for kernel_gen_name in MyMaternKernel MyNSKernel_Lengthscale PeriodicKernel TransformedMaternKernel; do
     for method in VGP VGP_SM VGP_Wilson2015Deep DeepKernelNNGP SPGP; do
         for m in 10 30 50 70 90; do
+            for seed in {1..20}; do
 
-            echo "======================================"
-            echo "Running: method=$method, kernel=$kernel_gen_name, m=$m"
-            echo "======================================"
+                echo "======================================"
+                echo "Running: method=$method, kernel=$kernel_gen_name, m=$m"
+                echo "======================================"
 
-            python3 main.py "$method" "$d" "$m" simulation "$kernel_gen_name" \
-                > "${method}_${kernel_gen_name}_${d}_${m}_sim.out" 2>&1
-
+                python3 main.py "$method" "$d" "$m" simulation "$kernel_gen_name" --seed "$seed" \
+                    > "${method}_${kernel_gen_name}_${d}_${m}_sim.out" 2>&1
+                
+            done
         done
     done
 done

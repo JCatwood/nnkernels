@@ -64,6 +64,12 @@ def parse_args():
         default=None,
         help="Number of replicates (data mode only)",
     )
+    parser.add_argument(
+        "--seed",
+        type=int,
+        default=123,
+        help="Random seed used for Python, NumPy, and PyTorch (default: 123)",
+    )
 
     args = parser.parse_args()
 
@@ -112,6 +118,7 @@ def parse_args():
         "method": args.method,
         "d": args.d,
         "m": args.m,
+        "seed": args.seed,
         "train_type": args.train_type,
         "kernel_gen_name": kernel_gen_name,
         "KernelGen": KernelGen,
