@@ -5,7 +5,8 @@ This repository provides code to reproduce the results in the paper [Permutation
 - `pkg`: the developed python package implementing the proposed Neural Vecchia (**NeuVec**) method as well as the classic Vecchia approximation of GPs.
 - `argo_data.py`: download and pre-process the Argo dataset
 - `kernel_config.py`: configurations for kernels used for data simulation in the simulation study
-- `models.py`: initialization of the models to be trained (i.e., NeuVec and three benchmarks)
+- `models.py`: initialization of NeuVec and four benchmark methods:
+  VGP, VGP-SM, VGP-Wilson2015Deep, and SPGP.
 - `parse_args.py`: script for parsing command line arguments used in `main.py`
 - `true_kernel_rslt.py`: script for computing the MSE and NLL using the true kernel in the simulation study
 - `main.py`: the main script for simulation and real-data study
@@ -21,12 +22,12 @@ pip install -e pkg
 ```
 Also need to install other dependent modules with
 ```
-pip install pandas argopy 
+pip install pandas argopy xarray
 ```
 
 ## Simulation 
 
-To run the four methods over four simulation scenarios using different `m` (conditioning set size), create the following bash script, for example, named `sim.sh`.
+To run the five methods over four simulation scenarios using different `m`, create the following bash script, for example, named `sim.sh`. For VGP, VGP-SM, VGP-Wilson2015Deep, and DeepKernelNNGP, `m` denotes the size of the Vecchia conditioning set. For SPGP, the current implementation uses `m` both as the conditioning-set size in the common evaluation pipeline and as the number of trainable pseudo-inputs.
 ```
 #!/bin/bash
 set -euo pipefail
@@ -86,7 +87,7 @@ for data_name in Argo; do
         echo "Running: method=$method, data=$data_name"
         echo "======================================"
 
-        python3 main.py "$method" "$d" "$m" data "$data_name" 17
+        python3 main.py "$method" "$d" "$m" data "$data_name" 17 > "${method}_${data_name}_${d}_${m}_data.out" 2>&1
 
     done
 done
