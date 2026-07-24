@@ -35,8 +35,8 @@ source venv/bin/activate
 
 d=3
 
-for kernel_gen_name in MyMaternKernel MyNSKernel_Lengthscale PeriodicKernel TransformedMaternKernel SPGP; do
-    for method in VGP VGP_SM VGP_Wilson2015Deep DeepKernelNNGP; do
+for kernel_gen_name in MyMaternKernel MyNSKernel_Lengthscale PeriodicKernel TransformedMaternKernel; do
+    for method in VGP VGP_SM VGP_Wilson2015Deep DeepKernelNNGP SPGP; do
         for m in 10 30 50 70 90; do
 
             echo "======================================"
