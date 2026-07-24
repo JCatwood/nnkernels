@@ -78,6 +78,8 @@ elif method == "VGP_SM":
     model, model_specs = init_VGP_SM(d, device=device, case=special_case, dropout=dropout_ratio)
 elif method == "VGP_Wilson2015Deep":
     model, model_specs = init_VGP_Wilson2015Deep(d, device=device, case=special_case, dropout=dropout_ratio)
+elif method == "SPGP":
+    model, model_specs = init_SPGP(d, m=m, device=device, case=special_case, dropout=dropout_ratio)
 else:
     raise ValueError("Undefined method name")
 

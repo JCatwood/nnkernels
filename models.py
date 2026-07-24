@@ -113,3 +113,24 @@ def init_VGP_Wilson2015Deep(d, device=None, case=None, dropout=0.0):
     }
     model = DeepKernelNNGP.GPVecchia(MeanClass, CovClass, mean_class_init, cov_class_init)
     return model, model_specs
+
+def init_SPGP(d, m=30, device=None, case=None, dropout=0.0):
+    """Initialize the sparse pseudo-input GP baseline."""
+    if device is None:
+        device = torch.device("cpu")
+
+    model = DeepKernelNNGP.SPGP(
+        d=d,
+        n_pseudo=m,
+        scale=0.5,
+        lengthscale=0.1,
+        nugget=0.01,
+        jitter=1e-5,
+    )
+    model_specs = {
+        "ModelClass": model.__class__.__name__,
+        "n_pseudo": m,
+        "kernel": "Matern32",
+        "mean": "ZeroMean",
+    }
+    return model, model_specs

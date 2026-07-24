@@ -14,7 +14,7 @@ def parse_args():
         "ConstMean": DeepKernelNNGP.ConstMean,
     }
 
-    valid_methods = ["VGP", "DeepKernelNNGP", "VGP_SM", "VGP_Wilson2015Deep"]
+    valid_methods = ["VGP", "DeepKernelNNGP", "VGP_SM", "VGP_Wilson2015Deep", "SPGP"]
 
     parser = argparse.ArgumentParser(description="GP variants training script")
 
@@ -39,7 +39,7 @@ def parse_args():
         nargs="?",
         type=int,
         default=30,
-        help="Size of the conditioning set",
+        help="Conditioning-set size; for SPGP, also the number of pseudo-inputs",
     )
 
     parser.add_argument(
