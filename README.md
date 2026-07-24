@@ -35,7 +35,7 @@ source venv/bin/activate
 
 d=3
 
-for kernel_gen_name in MyMaternKernel MyNSKernel_Lengthscale PeriodicKernel TransformedMaternKernel; do
+for kernel_gen_name in MyMaternKernel MyNSKernel_Lengthscale PeriodicKernel TransformedMaternKernel SPGP; do
     for method in VGP VGP_SM VGP_Wilson2015Deep DeepKernelNNGP; do
         for m in 10 30 50 70 90; do
 
@@ -80,7 +80,7 @@ d=4
 m=30
 
 for data_name in Argo; do
-    for method in VGP VGP_SM VGP_Wilson2015Deep DeepKernelNNGP; do
+    for method in VGP VGP_SM VGP_Wilson2015Deep DeepKernelNNGP SPGP; do
 
         echo "======================================"
         echo "Running: method=$method, data=$data_name"
