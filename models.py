@@ -2,7 +2,7 @@ import torch
 import DeepKernelNNGP
 
 def _get_mean_config(case, nfeatures, dropout=0.0):
-    if case == "Argo":
+    if case in {"Argo", "GHRSST"}:
         return (
             DeepKernelNNGP.NNMean,
             [nfeatures, [8, 8, 8], dropout],
@@ -24,6 +24,7 @@ def init_DeepKernelNNGP(d, device=None, case=None, dropout=0.0):
         "small": {"latent_dim": 32, "dim_middle": 64},
         "big": {"latent_dim": 64, "dim_middle": 128},
         "Argo": {"latent_dim": 16, "dim_middle": 16},
+        "GHRSST": {"latent_dim": 16, "dim_middle": 16},
     }
 
     if case is None:
@@ -118,8 +119,10 @@ def init_SPGP(d, m=30, device=None, case=None, dropout=0.0):
     """Initialize the sparse pseudo-input GP baseline."""
     if device is None:
         device = torch.device("cpu")
-
+    MeanClass, mean_class_init = _get_mean_config(case, d, dropout,)
     model = DeepKernelNNGP.SPGP(
+        MeanClass=MeanClass,
+        mean_class_init=mean_class_init,
         d=d,
         n_pseudo=m,
         scale=0.5,
@@ -127,10 +130,17 @@ def init_SPGP(d, m=30, device=None, case=None, dropout=0.0):
         nugget=0.01,
         jitter=1e-5,
     )
+
     model_specs = {
         "ModelClass": model.__class__.__name__,
+        "MeanClass": MeanClass.__name__,
+        "mean_class_init": mean_class_init,
         "n_pseudo": m,
         "kernel": "Matern32",
-        "mean": "ZeroMean",
+        "scale_init": 0.5,
+        "lengthscale_init": 0.1,
+        "nugget_init": 0.01,
+        "jitter": 1e-5,
     }
+
     return model, model_specs

@@ -17,6 +17,8 @@ class SPGP(torch.nn.Module):
 
     def __init__(
         self,
+        MeanClass,
+        mean_class_init,
         d,
         n_pseudo=30,
         scale=0.5,
@@ -32,6 +34,7 @@ class SPGP(torch.nn.Module):
         if scale <= 0 or lengthscale <= 0 or nugget <= 0 or jitter <= 0:
             raise ValueError("scale, lengthscale, nugget, and jitter must be positive")
 
+        self.mean = MeanClass(*mean_class_init)
         self.d = int(d)
         self.n_pseudo = int(n_pseudo)
         self.jitter = float(jitter)
@@ -102,12 +105,29 @@ class SPGP(torch.nn.Module):
         return cov.squeeze(0) if squeeze_batch else cov
 
     def cond_mean_sd(self, locs_batch, y_batch):
-        """Compute p(y_target | y_conditioning) with a zero mean."""
+        """Compute the conditional predictive mean and standard deviation."""
+
         covmat = self.covariance(locs_batch)
+        mean = self.mean(locs_batch)
+
+        y_batch_demean = y_batch - mean
+
         chol = torch.linalg.cholesky(covmat)
-        solved = torch.linalg.solve_triangular(chol, y_batch, upper=False)
-        cond_mean = chol[:, -1:, :-1] @ solved[:, :-1, :]
+
+        solved = torch.linalg.solve_triangular(
+            chol,
+            y_batch_demean,
+            upper=False,
+        )
+
+        cond_mean = (
+            chol[:, -1:, :-1]
+            @ solved[:, :-1, :]
+            + mean[:, -1:, :]
+        )
+
         cond_sd = chol[:, -1:, -1:]
+
         return cond_mean, cond_sd
 
     def forward(self, locs_batch, y_batch):

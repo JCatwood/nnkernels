@@ -127,9 +127,9 @@ def coverage_95(y_pred, y_true, y_stderr, eps=1e-6):
 
 # %% model init
 if train_type == "data":
-    dropout_ratio = 0.3  
-    if data_name == "Argo":
-        special_case = "Argo"
+    dropout_ratio = 0.3
+    if data_name in {"Argo", "GHRSST"}:
+        special_case = data_name
     else:
         special_case = None
 else:
