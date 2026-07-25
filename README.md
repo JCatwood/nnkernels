@@ -119,11 +119,11 @@ for method in VGP VGP_SM VGP_Wilson2015Deep DeepKernelNNGP SPGP; do
     echo "Running: method=$method, data=$data_name"
     echo "======================================"
 
-    python3 main.py "$method" "$d" "$m" data "$data_name" 17 > "${method}_${data_name}_${d}_${m}_data.out" 2>&1
+    python3 main.py "$method" "$d" "$m" data "$data_name" 20 > "${method}_${data_name}_${d}_${m}_data.out" 2>&1
 
 done
 ```
-Here, `17` is the number of years, also the number of replicates. Run the above script with 
+Here, `20` is the number of years, also the number of replicates. Run the above script with 
 ```
 chmod +x data_sst.sh
 ./data_sst.sh
