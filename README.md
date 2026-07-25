@@ -4,6 +4,7 @@ This repository provides code to reproduce the results in the paper [Permutation
 # Directory
 - `pkg`: the developed python package implementing the proposed Neural Vecchia (**NeuVec**) method as well as the classic Vecchia approximation of GPs.
 - `argo_data.py`: download and pre-process the Argo dataset
+- `ghrsst_data.py`: download and pre-process the Argo dataset
 - `kernel_config.py`: configurations for kernels used for data simulation in the simulation study
 - `models.py`: initialization of NeuVec and four benchmark methods:
   VGP, VGP-SM, VGP-Wilson2015Deep, and SPGP.
@@ -35,20 +36,19 @@ set -euo pipefail
 source venv/bin/activate
 
 d=3
+seed=123
 
 for kernel_gen_name in MyMaternKernel MyNSKernel_Lengthscale PeriodicKernel TransformedMaternKernel; do
     for method in VGP VGP_SM VGP_Wilson2015Deep DeepKernelNNGP SPGP; do
         for m in 10 30 50 70 90; do
-            for seed in {1..20}; do
 
-                echo "======================================"
-                echo "Running: method=$method, kernel=$kernel_gen_name, m=$m"
-                echo "======================================"
+            echo "======================================"
+            echo "Running: method=$method, kernel=$kernel_gen_name, m=$m"
+            echo "======================================"
 
-                python3 main.py "$method" "$d" "$m" simulation "$kernel_gen_name" --seed "$seed" \
-                    > "${method}_${kernel_gen_name}_${d}_${m}_sim.out" 2>&1
-                
-            done
+            python3 main.py "$method" "$d" "$m" simulation "$kernel_gen_name" --seed "$seed" \
+                > "${method}_${kernel_gen_name}_${d}_${m}_sim.out" 2>&1
+            
         done
     done
 done
@@ -72,7 +72,7 @@ First, download and process the Argo data by
 ```
 python3 argo_data.py
 ```
-Then create the following bash script, for example, named `data.sh`.
+Then create the following bash script, for example, named `data_argo.sh`.
 ```
 #!/bin/bash
 set -euo pipefail
@@ -81,23 +81,52 @@ source venv/bin/activate
 
 d=4
 m=30
+data_name="Argo"
+for method in VGP VGP_SM VGP_Wilson2015Deep DeepKernelNNGP SPGP; do
 
-for data_name in Argo; do
-    for method in VGP VGP_SM VGP_Wilson2015Deep DeepKernelNNGP SPGP; do
+    echo "======================================"
+    echo "Running: method=$method, data=$data_name"
+    echo "======================================"
 
-        echo "======================================"
-        echo "Running: method=$method, data=$data_name"
-        echo "======================================"
+    python3 main.py "$method" "$d" "$m" data "$data_name" 17 > "${method}_${data_name}_${d}_${m}_data.out" 2>&1
 
-        python3 main.py "$method" "$d" "$m" data "$data_name" 17 > "${method}_${data_name}_${d}_${m}_data.out" 2>&1
-
-    done
 done
 ```
 Here, `17` is the number of years, also the number of replicates. Run the above script with 
 ```
-chmod +x data.sh
-./data.sh
+chmod +x data_argo.sh
+./data_argo.sh
+```
+
+## GHRSST data
+First, download and process the GHRSST data by
+```
+python3 ghrsst_data.py
+```
+Then create the following bash script, for example, named `data_sst.sh`.
+```
+#!/bin/bash
+set -euo pipefail
+
+source venv/bin/activate
+
+d=2
+m=30
+data_name="GHRSST"
+for method in VGP VGP_SM VGP_Wilson2015Deep DeepKernelNNGP SPGP; do
+
+    echo "======================================"
+    echo "Running: method=$method, data=$data_name"
+    echo "======================================"
+
+    python3 main.py "$method" "$d" "$m" data "$data_name" 17 > "${method}_${data_name}_${d}_${m}_data.out" 2>&1
+
+done
+```
+Here, `17` is the number of years, also the number of replicates. Run the above script with 
+```
+chmod +x data_sst.sh
+./data_sst.sh
 ```
 
 ## Reproduce illustrations
