@@ -111,6 +111,19 @@ def mse_loss(y_pred, y_true):
     squared_error = (y_pred - y_true) ** 2
     return score_mean_se(squared_error)
     return crps.mean()
+def coverage_95(y_pred, y_true, y_stderr, eps=1e-6):
+    y_stderr = y_stderr.clamp_min(eps)
+    lower = y_pred - 1.96 * y_stderr
+    upper = y_pred + 1.96 * y_stderr
+    covered = ((y_true >= lower) &(y_true <= upper)).to(y_pred.dtype)
+    coverage = covered.mean()
+    n = covered.numel()
+    if n <= 1:
+        coverage_se = torch.full_like(coverage, float("nan"),)
+    else:
+        coverage_se = torch.sqrt(coverage * (1.0 - coverage) / n)
+
+    return coverage, coverage_se
 
 # %% model init
 if train_type == "data":
@@ -190,10 +203,12 @@ with torch.no_grad():
         loss_NLL_val, loss_NLL_se = nll_loss(y_pred, y_true, y_pred_stderr,)
         loss_CRPS_val, loss_CRPS_se = gaussian_crps(y_pred, y_true, y_pred_stderr,)
         loss_MSE_val, loss_MSE_se = mse_loss(y_pred, y_true,)
+        coverage_95_val, coverage_95_se = coverage_95(y_pred, y_true, y_pred_stderr,)
     else:
         loss_NLL_val_total = torch.tensor(0.0, device=device, dtype=torch.get_default_dtype())
         loss_CRPS_val_total = torch.tensor(0.0, device=device, dtype=torch.get_default_dtype())
         loss_MSE_val_total = torch.tensor(0.0, device=device, dtype=torch.get_default_dtype())
+        coverage_95_val_total = torch.tensor(0.0, device=device, dtype=torch.get_default_dtype())
         n_total = 0
         for k in range(dataloader.n_replicates):
             X_batch, y_batch, y_true = dataloader.get_test_batch(rep_ind=[k,], m=m)
@@ -202,10 +217,12 @@ with torch.no_grad():
             loss_NLL_val_total += nll_loss(y_pred, y_true, y_pred_stderr)[0] * y_pred.size(0)
             loss_CRPS_val_total += gaussian_crps(y_pred, y_true, y_pred_stderr)[0] * y_pred.size(0)
             loss_MSE_val_total += mse_loss(y_pred, y_true)[0] * y_pred.size(0)
+            coverage_95_val_total += coverage_95(y_pred, y_true, y_pred_stderr)[0] * y_pred.size(0)
             n_total += y_pred.size(0)
         loss_NLL_val = loss_NLL_val_total / n_total
         loss_CRPS_val = loss_CRPS_val_total / n_total
         loss_MSE_val = loss_MSE_val_total / n_total
+        coverage_95_val = coverage_95_val_total / n_total
     print(">>>")
     if train_type == "simulation":
         output_dict = {
@@ -220,6 +237,8 @@ with torch.no_grad():
             "CRPS_SE": loss_CRPS_se.item(),
             "MSE": loss_MSE_val.item(),
             "MSE_SE": loss_MSE_se.item(),
+            "Coverage95": 100.0 * coverage_95_val.item(),
+            "Coverage95_SE": 100.0 * coverage_95_se.item(),
             "model_specs": model_specs,
             "time_total": time_total,
         }
@@ -233,6 +252,7 @@ with torch.no_grad():
             "NLL": loss_NLL_val.item(),
             "CRPS": loss_CRPS_val.item(),
             "MSE": loss_MSE_val.item(),
+            "Coverage95": 100.0 * coverage_95_val.item(),
             "n_replicates": n_replicates,
             "model_specs": model_specs,
             "time_total": time_total,
