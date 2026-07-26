@@ -74,8 +74,8 @@ def score_mean_se(scores):
         score_se = torch.full_like(score_mean, float("nan"))
     else:
         score_se = scores.std(unbiased=True) / math.sqrt(n)
-
     return score_mean, score_se
+    
 def nll_loss(y_pred, y_true, y_stderr, eps=1e-6):
     y_stderr = y_stderr.clamp_min(eps)
 
@@ -84,8 +84,8 @@ def nll_loss(y_pred, y_true, y_stderr, eps=1e-6):
         + 0.5 * math.log(2.0 * math.pi)
         + torch.log(y_stderr)
     )
-
     return score_mean_se(nll)
+
 def gaussian_crps(y_pred, y_true, y_stderr, eps=1e-6):
     y_stderr = y_stderr.clamp_min(eps)
 
@@ -105,12 +105,12 @@ def gaussian_crps(y_pred, y_true, y_stderr, eps=1e-6):
         + 2.0 * standard_normal_pdf
         - 1.0 / math.sqrt(math.pi)
     )
-
     return score_mean_se(crps)
+
 def mse_loss(y_pred, y_true):
     squared_error = (y_pred - y_true) ** 2
     return score_mean_se(squared_error)
-    return crps.mean()
+
 def coverage_95(y_pred, y_true, y_stderr, eps=1e-6):
     y_stderr = y_stderr.clamp_min(eps)
     lower = y_pred - 1.96 * y_stderr

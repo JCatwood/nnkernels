@@ -69,5 +69,5 @@ class NNKernel(torch.nn.Module):
             cond_sd: of shape [B, 1, 1]
         """
         krig_coeff = self.model_coeff(locs_trans_batch)
-        cond_sd = torch.exp(self.model_sd(locs_trans_batch))
+        cond_sd = torch.exp(self.model_sd(locs_trans_batch)).unsqueeze(-1)
         return krig_coeff, cond_sd
