@@ -48,6 +48,57 @@ class PermPreserveClass(torch.nn.Module):
         rho1 = self.rho1(rho1_input) # [*, m, d_rho1]
         return rho1
 
+class VanillaCoeffMLP(torch.nn.Module):
+    """Vanilla MLP for predicting all kriging coefficients jointly.
+
+    The input has shape [B, m, d_in]. It is flattened to [B, m * d_in],
+    and the output has shape [B, m, 1].
+
+    Unlike PermPreserveClass, this architecture is not permutation
+    preserving with respect to the conditioning locations.
+    """
+
+    def __init__(self, m, nfeatures, dim_middle, nlayer_middle, dropout=0.0):
+        super().__init__()
+
+        if m < 1:
+            raise ValueError("m must be positive")
+
+        self.m = int(m)
+        self.nfeatures = int(nfeatures)
+
+        size_seq = [m * nfeatures] + [dim_middle for _ in range(nlayer_middle)] + [m]
+        self.network = _build_block(size_seq, dropout=dropout, normalize=True)
+
+    def forward(self, X):
+        """
+        Parameters
+        ----------
+        X : torch.Tensor
+            Tensor with shape [B, m, nfeatures].
+
+        Returns
+        -------
+        torch.Tensor
+            Kriging coefficients with shape [B, m, 1].
+        """
+        if X.shape[-2] != self.m:
+            raise ValueError(
+                f"VanillaCoeffMLP was initialized with m={self.m}, "
+                f"but received an input with {X.shape[-2]} conditioning locations."
+            )
+
+        if X.shape[-1] != self.nfeatures:
+            raise ValueError(
+                f"VanillaCoeffMLP expected {self.nfeatures} features, "
+                f"but received {X.shape[-1]}."
+            )
+
+        X_flat = X.reshape(*X.shape[:-2], self.m * self.nfeatures)
+        coefficients = self.network(X_flat)
+
+        return coefficients.unsqueeze(-1)
+
 class NNKernel(torch.nn.Module):
     def __init__(self, nfeatures, dim_middle, dim_latent, nlayer_middle_rho, nlayer_middle_phi,
                  nlayer_middle_rho1, nlayer_middle_rho2, dropout=0.2):
@@ -70,4 +121,36 @@ class NNKernel(torch.nn.Module):
         """
         krig_coeff = self.model_coeff(locs_trans_batch)
         cond_sd = torch.exp(self.model_sd(locs_trans_batch)).unsqueeze(-1)
+        return krig_coeff, cond_sd
+
+class NNKernel_BL_Coef(torch.nn.Module):
+    """NeuVec ablation with a vanilla MLP for kriging coefficients."""
+
+    def __init__(self, m, nfeatures, dim_middle, dim_latent, nlayer_middle_rho, nlayer_middle_phi, 
+                 nlayer_middle_coeff, dropout=0.2,):
+        super().__init__()
+        size_phi = [nfeatures] + [dim_middle for _ in range(nlayer_middle_phi)] + [dim_latent]
+        size_rho = [dim_latent] + [dim_middle for _ in range(nlayer_middle_rho)] + [1]
+
+        self.model_coeff = VanillaCoeffMLP(m=m, nfeatures=nfeatures, dim_middle=dim_middle, 
+            nlayer_middle=nlayer_middle_coeff, dropout=dropout)
+        self.model_sd = PermInvarClass(size_phi, size_rho, dropout=dropout)
+
+    def forward(self, locs_trans_batch):
+        """
+        Parameters
+        ----------
+        locs_trans_batch : torch.Tensor
+            Tensor with shape [B, m, nfeatures].
+
+        Returns
+        -------
+        krig_coeff : torch.Tensor
+            Tensor with shape [B, m, 1].
+        cond_sd : torch.Tensor
+            Tensor with shape [B, 1, 1].
+        """
+        krig_coeff = self.model_coeff(locs_trans_batch)
+        cond_sd = torch.exp(self.model_sd(locs_trans_batch)).unsqueeze(-1)
+
         return krig_coeff, cond_sd

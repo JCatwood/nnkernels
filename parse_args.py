@@ -14,7 +14,7 @@ def parse_args():
         "ConstMean": DeepKernelNNGP.ConstMean,
     }
 
-    valid_methods = ["VGP", "DeepKernelNNGP", "VGP_SM", "VGP_Wilson2015Deep", "SPGP"]
+    valid_methods = ["VGP", "DeepKernelNNGP", "DeepKernelNNGP_BL_Coef", "VGP_SM", "VGP_Wilson2015Deep", "SPGP"]
 
     parser = argparse.ArgumentParser(description="GP variants training script")
 

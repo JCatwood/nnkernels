@@ -137,6 +137,8 @@ else:
     special_case = None
 if method == "DeepKernelNNGP":
     model, model_specs = init_DeepKernelNNGP(d, device=device, case=special_case, dropout=dropout_ratio)
+elif method == "DeepKernelNNGP_BL_Coef":
+    model, model_specs = init_DeepKernelNNGP_BL_Coef(d, m=m, device=device, case=special_case, dropout=dropout_ratio)
 elif method == "VGP":
     model, model_specs = init_VGP(d, device=device, case=special_case, dropout=dropout_ratio)
 elif method == "VGP_SM":
