@@ -205,24 +205,56 @@ with torch.no_grad():
         loss_MSE_val, loss_MSE_se = mse_loss(y_pred, y_true,)
         coverage_95_val, coverage_95_se = coverage_95(y_pred, y_true, y_pred_stderr,)
     else:
+        # Weighted totals for the overall means.
         loss_NLL_val_total = torch.tensor(0.0, device=device, dtype=torch.get_default_dtype())
         loss_CRPS_val_total = torch.tensor(0.0, device=device, dtype=torch.get_default_dtype())
         loss_MSE_val_total = torch.tensor(0.0, device=device, dtype=torch.get_default_dtype())
         coverage_95_val_total = torch.tensor(0.0, device=device, dtype=torch.get_default_dtype())
+
         n_total = 0
+
+        # Replicate-level scores for computing standard errors.
+        nll_replicate_values = []
+        crps_replicate_values = []
+        mse_replicate_values = []
+        coverage_replicate_values = []
+
         for k in range(dataloader.n_replicates):
-            X_batch, y_batch, y_true = dataloader.get_test_batch(rep_ind=[k,], m=m)
-            X_batch, y_batch, y_true = X_batch.to(device), y_batch.to(device), y_true.to(device)
+            X_batch, y_batch, y_true = dataloader.get_test_batch(rep_ind=[k], m=m)
+            X_batch = X_batch.to(device)
+            y_batch = y_batch.to(device)
+            y_true = y_true.to(device)
             y_pred, y_pred_stderr = model(X_batch, y_batch)
-            loss_NLL_val_total += nll_loss(y_pred, y_true, y_pred_stderr)[0] * y_pred.size(0)
-            loss_CRPS_val_total += gaussian_crps(y_pred, y_true, y_pred_stderr)[0] * y_pred.size(0)
-            loss_MSE_val_total += mse_loss(y_pred, y_true)[0] * y_pred.size(0)
-            coverage_95_val_total += coverage_95(y_pred, y_true, y_pred_stderr)[0] * y_pred.size(0)
-            n_total += y_pred.size(0)
+            nll_k, _ = nll_loss(y_pred, y_true, y_pred_stderr)
+            crps_k, _ = gaussian_crps(y_pred, y_true, y_pred_stderr)
+            mse_k, _ = mse_loss(y_pred, y_true)
+            coverage_k, _ = coverage_95(y_pred, y_true, y_pred_stderr)
+
+            n_test_k = y_pred.numel()
+
+            loss_NLL_val_total += nll_k * n_test_k
+            loss_CRPS_val_total += crps_k * n_test_k
+            loss_MSE_val_total += mse_k * n_test_k
+            coverage_95_val_total += coverage_k * n_test_k
+
+            n_total += n_test_k
+
+            nll_replicate_values.append(nll_k)
+            crps_replicate_values.append(crps_k)
+            mse_replicate_values.append(mse_k)
+            coverage_replicate_values.append(coverage_k)
+
+        # Sample-size-weighted means (same definition as before).
         loss_NLL_val = loss_NLL_val_total / n_total
         loss_CRPS_val = loss_CRPS_val_total / n_total
         loss_MSE_val = loss_MSE_val_total / n_total
         coverage_95_val = coverage_95_val_total / n_total
+
+        # Standard errors across replicates.
+        _, loss_NLL_se = score_mean_se(torch.stack(nll_replicate_values))
+        _, loss_CRPS_se = score_mean_se(torch.stack(crps_replicate_values))
+        _, loss_MSE_se = score_mean_se(torch.stack(mse_replicate_values))
+        _, coverage_95_se = score_mean_se(torch.stack(coverage_replicate_values))
     print(">>>")
     if train_type == "simulation":
         output_dict = {
@@ -250,10 +282,14 @@ with torch.no_grad():
             "m": m,
             "seed": seed,
             "NLL": loss_NLL_val.item(),
+            "NLL_SE": loss_NLL_se.item(),
             "CRPS": loss_CRPS_val.item(),
+            "CRPS_SE": loss_CRPS_se.item(),
             "MSE": loss_MSE_val.item(),
+            "MSE_SE": loss_MSE_se.item(),
             "Coverage95": 100.0 * coverage_95_val.item(),
-            "n_replicates": n_replicates,
+            "Coverage95_SE": 100.0 * coverage_95_se.item(),
+            "n_replicates": dataloader.n_replicates,
             "model_specs": model_specs,
             "time_total": time_total,
         }
